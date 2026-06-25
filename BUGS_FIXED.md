@@ -12,9 +12,9 @@
 4. **Нет обработки 401/403** — ошибки авторизации не диагностировались явно
 
 ### Исправления
-- Endpoint обновлён: `POST http://localhost:3001/v1.0/browser_profiles/{id}/start`
+- Endpoint обновлён на Remote API: `POST https://dolphin-anty-api.com/browser_profiles/{id}/start`
 - Добавлен `.strip()` при загрузке (`_load_config`), сохранении (`save_token`) и использовании токена
-- Добавлен метод `_validate_dolphin_token()` с тестовым GET-запросом к `/v1.0/browser_profiles`
+- Добавлен метод `_validate_dolphin_token()` с тестовым GET-запросом к `https://dolphin-anty-api.com/browser_profiles`
 - В `_open_profiles`: при HTTP 401/403 выводится явное сообщение и цикл прерывается
 - Добавлена retry-логика: 3 попытки с паузой 3 сек при `ConnectionError`
 

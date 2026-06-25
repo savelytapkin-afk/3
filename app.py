@@ -15,6 +15,8 @@ import re
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+DOLPHIN_API_BASE_URL = "https://dolphin-anty-api.com"
+
 # Категории для каждой платформы
 PLATFORMS_CATEGORIES = {
     "vinted": {"1": "детское", "2": "дизайнерское", "3": "для дома", "4": "женское", "5": "мужское", "6": "развлечения", "7": "спорт", "8": "электроника"},
@@ -490,7 +492,7 @@ class App(ctk.CTk):
 ✅ Проверка ответов и рассылка HTML
 ✅ Интеграция с CreateAd API
 ✅ Персонализация писем {title}, {price}, {name}
-✅ Исправлен endpoint Dolphin API (v1.0/browser_profiles/{id}/start)
+✅ Dolphin API переключён на Cloud API (https://dolphin-anty-api.com/browser_profiles/{id}/start)
 ✅ Нормализация токена (.strip())
 ✅ Валидация токена перед открытием профилей
 ✅ Retry-логика для подключения
@@ -514,7 +516,7 @@ v3.4 - 2026-06-25"""
             return False
         
         self._log("\n🔍 Проверка токена Dolphin...")
-        url = "http://localhost:3001/v1.0/browser_profiles"
+        url = f"{DOLPHIN_API_BASE_URL}/browser_profiles"
         headers = {"Authorization": "Bearer " + token}
         try:
             response = requests.get(url, headers=headers, timeout=10)
@@ -533,10 +535,11 @@ v3.4 - 2026-06-25"""
                 self._log(f"⚠️ Неожиданный статус при проверке токена: HTTP {response.status_code}")
                 return True  # Продолжаем, но предупреждаем
         except requests.exceptions.ConnectionError:
-            self._log("❌ Dolphin Anty недоступен на localhost:3001. Запустите приложение Dolphin Anty.")
+            self._log(f"❌ Dolphin Remote API недоступен: {DOLPHIN_API_BASE_URL}")
+            self._log("  💡 Проверьте интернет-соединение и доступность Cloud API Dolphin Anty.")
             return False
         except requests.exceptions.Timeout:
-            self._log("❌ Timeout при проверке токена Dolphin (localhost:3001)")
+            self._log(f"❌ Timeout при проверке токена Dolphin ({DOLPHIN_API_BASE_URL})")
             return False
     
     def _parse_emails(self) -> list:
@@ -740,7 +743,7 @@ v3.4 - 2026-06-25"""
             try:
                 self._log(f"\n  📋 Профиль: {profile_id}")
                 
-                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
+                url = f"{DOLPHIN_API_BASE_URL}/browser_profiles/{profile_id}/start"
                 headers = {"Authorization": "Bearer " + token}
                 
                 self._log(f"  📤 POST {url}")
@@ -802,7 +805,7 @@ v3.4 - 2026-06-25"""
             
             except requests.exceptions.ConnectionError as e:
                 self._log(f"  ❌ Ошибка подключения: {e}")
-                self._log(f"  💡 Проверьте: запущен ли Dolphin Anty на localhost:3001?")
+                self._log(f"  💡 Проверьте доступ к Cloud API Dolphin Anty: {DOLPHIN_API_BASE_URL}")
             except requests.exceptions.Timeout as e:
                 self._log(f"  ❌ Timeout: {e}")
             except Exception as e:
