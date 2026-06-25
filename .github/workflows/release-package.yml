@@ -1,0 +1,65 @@
+name: Build Release Package
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  release:
+    types: [published]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate app syntax
+        run: python -m py_compile app.py
+
+      - name: Validate config JSON
+        run: |
+          python - <<'PY'
+          import json
+          for path in ["config.json.example", "settings.json", "dolphin.json"]:
+              with open(path, encoding="utf-8") as f:
+                  json.load(f)
+          print("JSON files valid")
+          PY
+
+  package:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build zip package
+        run: python build_release_package.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmail-sender-deployment
+          path: dist/gmail-sender-deployment.zip
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/gmail-sender-deployment.zip

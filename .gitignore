@@ -9,3 +9,9 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local runtime/build files
+.venv/
+dist/
+profiles.txt
+sellers_data.json

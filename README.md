@@ -25,6 +25,11 @@
 pip install -r requirements.txt
 ```
 
+Для автоматизированной установки можно использовать:
+
+- `install.sh` (Linux/macOS)
+- `install.bat` (Windows)
+
 ## ▶️ Запуск
 
 ```bash
@@ -87,3 +92,8 @@ v3.5 - 2026-06-25
 - ✅ Spintax поддержка
 - ✅ CreateAd интеграция
 - ✅ Мультиязычные селекторы Gmail
+
+## 📦 Deployment
+
+- Быстрый деплой и структура готового пакета: `DEPLOYMENT.md`
+- Автосборка релизного zip: `.github/workflows/release-package.yml`
