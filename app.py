@@ -93,19 +93,33 @@ def generate_link_via_api(seller_data: dict, user_id: str, api_key: str, service
         r = requests.post(CREATEAD_API, json=payload, timeout=30)
         r.raise_for_status()
         data = r.json()
-        if data.get("success") and data.get("link"):
-            return data["link"]
-        elif data.get("link"):
-            return data["link"]
+        link = data.get("link", "")
+        if link:
+            return link
+        print(f"[CreateAd] No link in response: {data}")
         return ""
-    except:
+    except Exception as e:
+        print(f"[CreateAd] Error generating link: {e}")
         return ""
 
 def dolphin_start(profile_id: str, token: str) -> dict:
     url = f"{DOLPHIN_API}/browser_profiles/{profile_id}/start?automation=1"
-    r = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=15)
-    r.raise_for_status()
-    return r.json()["automation"]
+    headers = {"Authorization": f"******"}
+    last_exc = None
+    for attempt in range(3):
+        try:
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code in (401, 403):
+                raise RuntimeError(f"Dolphin auth failed ({r.status_code}): check your API token")
+            r.raise_for_status()
+            return r.json()["automation"]
+        except requests.exceptions.ConnectionError as e:
+            last_exc = e
+            if attempt < 2:
+                time.sleep(3)
+        except RuntimeError:
+            raise
+    raise RuntimeError(f"Could not connect to Dolphin after 3 attempts: {last_exc}") from last_exc
 
 def dolphin_stop(profile_id: str, token: str):
     try:
@@ -202,9 +216,11 @@ def check_and_reply(driver, reply_body: str, user_id: str, api_key: str, service
                     link = generate_link_via_api(seller_data, user_id, api_key, service_code)
                     final_reply_body = final_reply_body.replace("{link}", link)
                     final_reply_body = final_reply_body.replace("{price}", seller_data.get("price", ""))
+                    final_reply_body = final_reply_body.replace("{name}", seller_data.get("seller_name", ""))
                 else:
                     final_reply_body = final_reply_body.replace("{link}", "")
                     final_reply_body = final_reply_body.replace("{price}", "")
+                    final_reply_body = final_reply_body.replace("{name}", "")
 
                 final_reply_body = spintax(final_reply_body)
 
@@ -448,6 +464,11 @@ class App(ctk.CTk):
         self.delay.pack(side="left", padx=5)
         self.delay.insert(0, str(self.settings_config.get("automation", {}).get("delay", 5)))
         
+        ctk.CTkLabel(ctrl_frame, text="Макс. писем (0=все):", font=("Arial", 10)).pack(side="left", padx=5)
+        self.max_letters_entry = ctk.CTkEntry(ctrl_frame, width=80)
+        self.max_letters_entry.pack(side="left", padx=5)
+        self.max_letters_entry.insert(0, str(self.settings_config.get("automation", {}).get("max_letters", 10)))
+        
         self.start_btn = ctk.CTkButton(ctrl_frame, text="▶ СТАРТ", command=self._start_automation, fg_color="#238636", width=120)
         self.start_btn.pack(side="left", padx=5)
         
@@ -597,6 +618,10 @@ class App(ctk.CTk):
             replied = 0
             profile_ids = list(drivers_pool.keys())
             
+            max_letters = int(self.max_letters_entry.get() or 0)
+            if max_letters > 0:
+                emails = emails[:max_letters]
+
             for idx, email in enumerate(emails):
                 if not self.running:
                     break
@@ -618,7 +643,8 @@ class App(ctk.CTk):
                     seller_data = sellers_data.get(email, {})
                     price = seller_data.get("price", "")
                     
-                    final_first_body = first_body.replace("{price}", price)
+                    title = seller_data.get("title", "")
+                    final_first_body = first_body.replace("{price}", price).replace("{title}", title)
                     final_first_body = spintax(final_first_body)
                     final_first_subject = spintax(first_subject)
                     
