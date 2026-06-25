@@ -34,7 +34,7 @@ PLATFORMS_CATEGORIES = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Gmail Sender v3.1")
+        self.title("Gmail Sender v3.2")
         self.geometry("1400x800")
         
         self.running = False
@@ -476,7 +476,7 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_settings)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="Gmail Sender v3.1", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(frame, text="Gmail Sender v3.2", font=("Arial", 18, "bold")).pack(pady=10)
         ctk.CTkLabel(frame, text="Автоматизация рассылки писем с интеллектуальным парсером", font=("Arial", 12)).pack(pady=5)
         
         info = """✅ Вкладка "Dolphin" с токеном и профилями
@@ -487,8 +487,9 @@ class App(ctk.CTk):
 ✅ Проверка ответов и рассылка HTML
 ✅ Интеграция с CreateAd API
 ✅ Персонализация писем {title}, {price}, {name}
+✅ Подробное логирование Dolphin API
 
-v3.1 - 2026-06-25"""
+v3.2 - 2026-06-25"""
         
         ctk.CTkLabel(frame, text=info, font=("Arial", 11), justify="left").pack(pady=10)
     
@@ -651,32 +652,69 @@ v3.1 - 2026-06-25"""
                 self._stop_send()
     
     def _open_profiles(self, profile_ids: list) -> dict:
-        """Открывает профили Dolphin"""
+        """Открывает профили Dolphin с подробным логированием"""
         drivers = {}
         token = self.config.get("token", "")
         
+        if not token:
+            self._log("❌ Ошибка: Токен не установлен!")
+            return drivers
+        
         for profile_id in profile_ids:
             try:
-                self._log(f"  Открываю {profile_id}...")
+                self._log(f"\n  📋 Профиль: {profile_id}")
+                
                 url = "http://localhost:3001/v1/browser/start-browser"
                 payload = {"browserId": profile_id}
                 headers = {"Authorization": f"Bearer {token}"}
                 
+                self._log(f"  📤 POST {url}")
+                self._log(f"  📦 Body: {payload}")
+                self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
+                
                 response = requests.post(url, json=payload, headers=headers, timeout=30)
+                
+                self._log(f"  📥 Status Code: {response.status_code}")
+                self._log(f"  📥 Response: {response.text}")
+                
                 if response.status_code == 200:
                     driver_info = response.json()
-                    driver_port = driver_info.get('webSocketDebuggerUrl', '').split(':')[-1]
+                    self._log(f"  ✅ Ответ: {json.dumps(driver_info, indent=2)}")
+                    
+                    # Ищем WebSocket URL
+                    ws_url = driver_info.get('webSocketDebuggerUrl', '')
+                    if not ws_url:
+                        self._log(f"  ❌ Ошибка: webSocketDebuggerUrl не найден в ответе")
+                        continue
+                    
+                    self._log(f"  🔗 WebSocket URL: {ws_url}")
+                    
+                    driver_port = ws_url.split(':')[-1]
+                    self._log(f"  🔌 Порт: {driver_port}")
                     
                     options = webdriver.ChromeOptions()
                     options.add_experimental_option('debuggerAddress', f'localhost:{driver_port}')
                     driver = webdriver.Chrome(options=options)
                     
                     drivers[profile_id] = driver
-                    self._log(f"    ✅ Открыт")
+                    self._log(f"  ✅ Профиль {profile_id} успешно открыт!")
                 else:
-                    self._log(f"    ❌ Ошибка открытия")
+                    self._log(f"  ❌ HTTP Error: {response.status_code}")
+                    try:
+                        error_data = response.json()
+                        self._log(f"  📋 Error Details: {json.dumps(error_data, indent=2)}")
+                    except:
+                        self._log(f"  📋 Response Body: {response.text}")
+            
+            except requests.exceptions.ConnectionError as e:
+                self._log(f"  ❌ Ошибка подключения: {e}")
+                self._log(f"  💡 Проверьте: запущен ли Dolphin Anty на localhost:3001?")
+            except requests.exceptions.Timeout as e:
+                self._log(f"  ❌ Timeout: {e}")
             except Exception as e:
-                self._log(f"    ❌ {e}")
+                self._log(f"  ❌ Неожиданная ошибка: {e}")
+                import traceback
+                self._log(f"  📋 Traceback: {traceback.format_exc()}")
         
         return drivers
     
