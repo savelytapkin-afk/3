@@ -25,8 +25,21 @@ ctk.set_default_color_theme("dark-blue")
 DOLPHIN_API = "http://localhost:3001/v1.0"
 PARSER_API = "http://vvsproject.xyz/ads"
 CREATEAD_API = "https://www-gumau.world/api/createAd"
+PARSER_API_TIMEOUT = 45
 
 SERVICE_CODES = ["vinted_it", "vinted_nl", "vinted_es", "vinted_dk", "vinted_be", "vinted_de", "subito_it", "wallapop_es"]
+PARSER_FILTER_DEFAULTS = {
+    "category": "",
+    "price": "",
+    "ads": "",
+    "reviews": "",
+    "publication": "5m",
+    "phone": "",
+    "delivery": "",
+    "registration": "",
+    "blacklist": "",
+    "limit": "50",
+}
 
 def spintax(text: str) -> str:
     import random
@@ -105,6 +118,12 @@ def get_driver(automation: dict) -> webdriver.Chrome:
     opts = Options()
     opts.add_experimental_option("debuggerAddress", f"127.0.0.1:{automation['port']}")
     return webdriver.Chrome(options=opts)
+
+def normalize_parser_platform(value: str) -> str:
+    platform = (value or "").strip().lower()
+    if "_" in platform:
+        return platform.split("_", 1)[0]
+    return platform
 
 def send_via_gmail(driver, recipient: str, subject: str, body: str):
     wait = WebDriverWait(driver, 40)
@@ -251,6 +270,12 @@ class App(ctk.CTk):
                 "automation": {"parser_key": "", "platform": "vinted", "country": "IT", "user_id": "", "api_key": "", "delay": 5, "service_code": "vinted_it"},
                 "parser_filters": {"limit": "50"}
             }
+        
+        self.settings_config.setdefault("templates", {})
+        self.settings_config.setdefault("automation", {})
+        self.settings_config.setdefault("parser_filters", {})
+        for key, value in PARSER_FILTER_DEFAULTS.items():
+            self.settings_config["parser_filters"].setdefault(key, value)
     
     def _save_dolphin_config(self):
         with open('dolphin.json', 'w', encoding='utf-8') as f:
@@ -497,8 +522,23 @@ class App(ctk.CTk):
             self._log(f"🛰 Парсинг {platform}...")
             self.status.configure(text="🟡 Парсинг...", text_color="#d29922")
             
-            params = {"country": "IT", "limit": "100"}
-            r = requests.get(f"{PARSER_API}/{platform}", headers={"api-key": parser_key}, params=params, timeout=30)
+            parser_filters = self.settings_config.get("parser_filters", {})
+            params = {
+                "country": self.settings_config.get("automation", {}).get("country", "IT"),
+                "limit": parser_filters.get("limit") or PARSER_FILTER_DEFAULTS["limit"],
+            }
+            for key in ("category", "price", "ads", "reviews", "publication", "delivery", "phone", "registration", "blacklist"):
+                value = parser_filters.get(key)
+                if value:
+                    params[key] = value
+
+            parser_platform = normalize_parser_platform(platform)
+            r = requests.get(
+                f"{PARSER_API}/{parser_platform}",
+                headers={"api-key": parser_key},
+                params=params,
+                timeout=PARSER_API_TIMEOUT,
+            )
             
             if r.status_code != 200:
                 self._log(f"❌ Ошибка парсера: {r.status_code}")

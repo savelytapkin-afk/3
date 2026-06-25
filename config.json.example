@@ -4,7 +4,7 @@
   "templates": {
     "first": {
       "subject": "Предложение сотрудничества",
-      "body": "Привет!\n\nПроверили ваше объявление, цена {price} нас интересует.\nХотим предложить сотрудничество.\n\nС уважением",
+      "body": "Привет!\\n\\nПроверили ваше объявление, цена {price} нас интересует.\\nХотим предложить сотрудничество.\\n\\nС уважением",
       "is_html": false
     },
     "reply": {
@@ -22,5 +22,17 @@
     "delay": 5,
     "max_letters": 10,
     "service_code": "vinted_it"
+  },
+  "parser_filters": {
+    "category": "",
+    "price": "10..100",
+    "ads": "0..",
+    "reviews": "0..",
+    "publication": "5m",
+    "phone": "true",
+    "delivery": "false",
+    "registration": "",
+    "blacklist": "",
+    "limit": "50"
   }
 }
