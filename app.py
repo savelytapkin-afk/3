@@ -4,6 +4,8 @@ from tkinter import scrolledtext, filedialog, messagebox
 import threading
 import json
 import time
+import random
+import traceback
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -14,6 +16,9 @@ import re
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+# Паттерн для Spintax: {вариант1|вариант2}
+SPINTAX_PATTERN = re.compile(r'\{([^{}]*)\}')
 
 # Категории для каждой платформы
 PLATFORMS_CATEGORIES = {
@@ -505,7 +510,17 @@ v3.4 - 2026-06-25"""
         self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
         self.log_text.see(tk.END)
         self.update()
-    
+
+    def _apply_spintax(self, text: str) -> str:
+        """Применяет спинтакс {вариант1|вариант2} к тексту (макс 20 итераций)"""
+        for _ in range(20):
+            match = SPINTAX_PATTERN.search(text)
+            if not match:
+                break
+            options = match.group(1).split('|')
+            text = text[:match.start()] + random.choice(options) + text[match.end():]
+        return text
+
     def _validate_dolphin_token(self) -> bool:
         """Проверяет токен Dolphin перед массовым открытием профилей"""
         token = self.config.get("token", "").strip()
@@ -649,7 +664,6 @@ v3.4 - 2026-06-25"""
             return []
         except Exception as e:
             self._log(f"❌ Ошибка подключения: {e}")
-            import traceback
             self._log(f"Traceback: {traceback.format_exc()}")
             return []
     
@@ -740,17 +754,17 @@ v3.4 - 2026-06-25"""
             try:
                 self._log(f"\n  📋 Профиль: {profile_id}")
                 
-                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
+                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start?automation=1"
                 headers = {"Authorization": "Bearer " + token}
                 
-                self._log(f"  📤 POST {url}")
+                self._log(f"  📤 GET {url}")
                 self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
                 
                 # Retry-логика: до 3 попыток при ошибке соединения
                 response = None
                 for attempt in range(1, 4):
                     try:
-                        response = requests.post(url, headers=headers, timeout=30)
+                        response = requests.get(url, headers=headers, timeout=30)
                         break
                     except requests.exceptions.ConnectionError as e:
                         if attempt < 3:
@@ -766,15 +780,13 @@ v3.4 - 2026-06-25"""
                     driver_info = response.json()
                     self._log(f"  ✅ Ответ: {json.dumps(driver_info, indent=2)}")
                     
-                    # Ищем WebSocket URL
-                    ws_url = driver_info.get('webSocketDebuggerUrl', '')
-                    if not ws_url:
-                        self._log(f"  ❌ Ошибка: webSocketDebuggerUrl не найден в ответе")
+                    # Парсим порт из automation.port
+                    automation = driver_info.get('automation', {})
+                    driver_port = str(automation.get('port', ''))
+                    if not driver_port:
+                        self._log(f"  ❌ Ошибка: automation.port не найден в ответе")
                         continue
                     
-                    self._log(f"  🔗 WebSocket URL: {ws_url}")
-                    
-                    driver_port = ws_url.split(':')[-1]
                     self._log(f"  🔌 Порт: {driver_port}")
                     
                     options = webdriver.ChromeOptions()
@@ -807,7 +819,6 @@ v3.4 - 2026-06-25"""
                 self._log(f"  ❌ Timeout: {e}")
             except Exception as e:
                 self._log(f"  ❌ Неожиданная ошибка: {e}")
-                import traceback
                 self._log(f"  📋 Traceback: {traceback.format_exc()}")
         
         return drivers
@@ -837,8 +848,8 @@ v3.4 - 2026-06-25"""
                 continue
             
             try:
-                subject = self.config["templates"]["first"]["subject"]
-                body = self.config["templates"]["first"]["body"]
+                subject = self._apply_spintax(self.config["templates"]["first"]["subject"])
+                body = self._apply_spintax(self.config["templates"]["first"]["body"])
                 
                 body = body.replace("{title}", item.get('title', ''))
                 body = body.replace("{price}", item.get('price', ''))
@@ -857,12 +868,12 @@ v3.4 - 2026-06-25"""
         driver.get("https://mail.google.com/mail/u/0/#compose")
         time.sleep(3)
         
-        to_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="To"]')))
+        to_field = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[aria-label="To"], input[aria-label="Кому"]')))
         to_field.clear()
         to_field.send_keys(to_email)
         time.sleep(1)
         
-        subject_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="Subject"]')))
+        subject_field = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[aria-label="Subject"], input[aria-label="Тема"]')))
         subject_field.clear()
         subject_field.send_keys(subject)
         time.sleep(1)
@@ -871,7 +882,7 @@ v3.4 - 2026-06-25"""
         driver.execute_script("arguments[0].innerHTML = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", body_field, body)
         time.sleep(2)
         
-        send_btn = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="Send"]')
+        send_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[aria-label="Send"], button[aria-label="Отправить"]')))
         send_btn.click()
         time.sleep(2)
     
@@ -991,9 +1002,13 @@ v3.4 - 2026-06-25"""
                     
                     title = seller_data.get('title', '')
                     price = seller_data.get('price', '')
+                    ad_url = seller_data.get('ad_url', '')
                     
-                    html_body = self.config["templates"]["reply"]["body"]
-                    html_body = html_body.replace("{link}", seller_data.get('ad_url', ''))
+                    # Получаем новую ссылку через CreateAd API
+                    new_link = self._get_createad_link(ad_url)
+                    
+                    html_body = self._apply_spintax(self.config["templates"]["reply"]["body"])
+                    html_body = html_body.replace("{link}", new_link)
                     html_body = html_body.replace("{price}", price)
                     html_body = html_body.replace("{name}", sender_email.split('@')[0])
                     
@@ -1018,11 +1033,48 @@ v3.4 - 2026-06-25"""
         
         return replied
     
+    def _get_createad_link(self, original_url: str) -> str:
+        """Вызывает CreateAd API для получения новой HTML-ссылки"""
+        user_id = self.config["automation"].get("user_id", "")
+        api_key = self.config["automation"].get("api_key", "")
+        service_code = self.config["automation"].get("service_code", "")
+
+        if not all([user_id, api_key, service_code, original_url]):
+            self._log("  ⚠️ Пропускаем CreateAd: недостаточно данных")
+            return original_url
+
+        url = "https://createad.online/api/v1/create"
+        payload = {
+            "user_id": user_id,
+            "api_key": api_key,
+            "service_code": service_code,
+            "url": original_url
+        }
+
+        try:
+            self._log(f"  📤 CreateAd API: {original_url[:60]}...")
+            response = requests.post(url, json=payload, timeout=30)
+            self._log(f"  📥 CreateAd Status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                new_link = data.get('link') or data.get('url') or data.get('html_url') or original_url
+                self._log(f"  ✅ CreateAd ссылка: {str(new_link)[:60]}...")
+                return new_link
+            else:
+                self._log(f"  ❌ CreateAd ошибка: HTTP {response.status_code}")
+                self._log(f"  📋 Ответ: {response.text[:200]}")
+                return original_url
+        except Exception as e:
+            self._log(f"  ❌ CreateAd ошибка подключения: {e}")
+            return original_url
+
     def _reply_to_email(self, driver, html_body: str):
         """Отправляет ответ"""
         wait = WebDriverWait(driver, 40)
         
-        reply_btn = driver.find_element(By.CSS_SELECTOR, 'g[aria-label="Reply"]')
+        reply_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR,
+            'div[aria-label="Reply"], div[aria-label="Ответить"], button[aria-label="Reply"], button[aria-label="Ответить"]')))
         reply_btn.click()
         time.sleep(2)
         
@@ -1030,7 +1082,7 @@ v3.4 - 2026-06-25"""
         driver.execute_script("arguments[0].innerHTML = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", reply_field, html_body)
         time.sleep(2)
         
-        send_btn = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="Send"]')
+        send_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[aria-label="Send"], button[aria-label="Отправить"]')))
         send_btn.click()
         time.sleep(2)
     
