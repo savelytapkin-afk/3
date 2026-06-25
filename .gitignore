@@ -1,0 +1,11 @@
+# User-specific config (created automatically by the app on first token save)
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
