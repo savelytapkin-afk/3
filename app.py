@@ -158,11 +158,6 @@ class App(ctk.CTk):
         label2 = ctk.CTkLabel(frame, text="\nОтвет на письмо (HTML):", font=("Arial", 12, "bold"))
         label2.pack(pady=10)
         
-        ctk.CTkLabel(frame, text="Тема:").pack()
-        self.reply_subject = ctk.CTkEntry(frame, width=400)
-        self.reply_subject.pack(pady=3)
-        self.reply_subject.insert(0, self.config["templates"]["reply"].get("subject", ""))
-        
         ctk.CTkLabel(frame, text="HTML (используй {link} и {price}):").pack()
         self.reply_body = ctk.CTkTextbox(frame, width=400, height=100)
         self.reply_body.pack(pady=3, fill="both", expand=True)
@@ -171,7 +166,6 @@ class App(ctk.CTk):
         def save_templates():
             self.config["templates"]["first"]["subject"] = self.first_subject.get()
             self.config["templates"]["first"]["body"] = self.first_body.get("1.0", tk.END)
-            self.config["templates"]["reply"]["subject"] = self.reply_subject.get()
             self.config["templates"]["reply"]["body"] = self.reply_body.get("1.0", tk.END)
             self._save_config()
             messagebox.showinfo("Успех", "Шаблоны сохранены")
@@ -312,7 +306,7 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_settings)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="Gmail Sender v2.2", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(frame, text="Gmail Sender v2.2.1", font=("Arial", 18, "bold")).pack(pady=10)
         ctk.CTkLabel(frame, text="Автоматизация рассылки писем", font=("Arial", 12)).pack(pady=5)
         
         info = """Функционал:
@@ -323,7 +317,7 @@ class App(ctk.CTk):
 ✅ Персонализация писем
 ✅ Профили остаются открыты между этапами
 
-Версия: 2.2
+Версия: 2.2.1 (без темы в ответах)
 Дата: 2026-06-25"""
         
         ctk.CTkLabel(frame, text=info, font=("Arial", 11), justify="left").pack(pady=10)
@@ -506,7 +500,7 @@ class App(ctk.CTk):
                 body = self._apply_variables(body, {"price": price})
                 
                 self._send_email(driver, email, subject, body, is_html=False)
-                self._log(f"✉️  Письмо отправлено: {email} (профиль {profile_id})")
+                self._log(f"📧  Письмо отправлено: {email} (профиль {profile_id})")
                 
                 time.sleep(delay)
                 
@@ -752,14 +746,14 @@ class App(ctk.CTk):
         html = template.replace("{link}", link)
         html = html.replace("{price}", str(price))
         
-        # Можно добавить персонализацию по email
+        # Персонализация по email
         name = email.split('@')[0]
         html = html.replace("{name}", name)
         
         return html
     
     def _reply_to_email(self, driver, html_body: str):
-        """Отправляет ответ на письмо"""
+        """Отправляет ответ на письмо (БЕЗ заполнения темы - Gmail сам добавляет Re:)"""
         wait = WebDriverWait(driver, 40)
         
         try:
@@ -768,7 +762,9 @@ class App(ctk.CTk):
             reply_btn.click()
             time.sleep(2)
             
-            # Поле для ввода
+            # ⚠️ ПРОПУСКАЕМ заполнение темы - Gmail сам добавляет "Re:"
+            
+            # Только заполняем HTML тело
             reply_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'div[role="textbox"]')))
             driver.execute_script("""
                 var el = arguments[0];
