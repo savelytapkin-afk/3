@@ -34,7 +34,7 @@ PLATFORMS_CATEGORIES = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Gmail Sender v3.2")
+        self.title("Gmail Sender v3.3")
         self.geometry("1400x800")
         
         self.running = False
@@ -476,7 +476,7 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_settings)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="Gmail Sender v3.2", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(frame, text="Gmail Sender v3.3", font=("Arial", 18, "bold")).pack(pady=10)
         ctk.CTkLabel(frame, text="Автоматизация рассылки писем с интеллектуальным парсером", font=("Arial", 12)).pack(pady=5)
         
         info = """✅ Вкладка "Dolphin" с токеном и профилями
@@ -488,8 +488,9 @@ class App(ctk.CTk):
 ✅ Интеграция с CreateAd API
 ✅ Персонализация писем {title}, {price}, {name}
 ✅ Подробное логирование Dolphin API
+✅ Подробное логирование парсера API
 
-v3.2 - 2026-06-25"""
+v3.3 - 2026-06-25"""
         
         ctk.CTkLabel(frame, text=info, font=("Arial", 11), justify="left").pack(pady=10)
     
@@ -501,7 +502,7 @@ v3.2 - 2026-06-25"""
         self.update()
     
     def _parse_emails(self) -> list:
-        """Получает email-ы через парсер API"""
+        """Получает email-ы через парсер API с подробным логированием"""
         try:
             # Лимит 1 запрос в 5 сек
             elapsed = time.time() - self.last_parser_request
@@ -545,41 +546,73 @@ v3.2 - 2026-06-25"""
             
             headers = {"api-key": api_key}
             
-            self._log(f"📡 Запрос к парсеру: {platform} | Параметры: {params}")
+            # Логирование запроса
+            self._log(f"\n📡 ЗАПРОС К ПАРСЕРУ")
+            self._log(f"  GET {url}")
+            self._log(f"  Параметры: {json.dumps(params, indent=4)}")
+            self._log(f"  Headers: api-key=[скрыто]")
             
             response = requests.get(url, headers=headers, params=params, timeout=30)
+            
+            # Логирование ответа
+            self._log(f"\n📥 ОТВЕТ ОТ ПАРСЕРА")
+            self._log(f"  Status Code: {response.status_code}")
+            self._log(f"  Response Headers: {dict(response.headers)}")
+            
+            # Логирование полного JSON
+            self._log(f"\n📋 ПОЛНЫЙ JSON ОТВЕТ:")
+            try:
+                response_json = response.json()
+                self._log(json.dumps(response_json, indent=2, ensure_ascii=False))
+            except:
+                self._log(f"  Raw Response: {response.text}")
             
             if response.status_code == 200:
                 data = response.json()
                 sellers = []
                 
-                # Преобразуем формат ответа в нужный
-                for seller_id, seller_data in data.items():
-                    sellers.append({
-                        'email': seller_data.get('email', ''),
-                        'title': seller_data.get('title', ''),
-                        'price': seller_data.get('price', ''),
-                        'ad_url': seller_data.get('ad_url', ''),
-                        'seller': seller_data.get('seller', '')
-                    })
+                self._log(f"\n🔍 ПАРСИНГ ОТВЕТА:")
+                self._log(f"  Тип данных: {type(data).__name__}")
                 
+                if isinstance(data, dict):
+                    self._log(f"  Количество ключей: {len(data)}")
+                    self._log(f"  Ключи: {list(data.keys())[:10]}")
+                    
+                    # Преобразуем формат ответа в нужный
+                    for idx, (seller_id, seller_data) in enumerate(data.items()):
+                        if idx < 3:  # Логируем первые 3
+                            self._log(f"\n  Item {idx}: {seller_id}")
+                            self._log(f"    Тип: {type(seller_data).__name__}")
+                            self._log(f"    Данные: {seller_data}")
+                        
+                        sellers.append({
+                            'email': seller_data.get('email', ''),
+                            'title': seller_data.get('title', ''),
+                            'price': seller_data.get('price', ''),
+                            'ad_url': seller_data.get('ad_url', ''),
+                            'seller': seller_data.get('seller', '')
+                        })
+                
+                self._log(f"\n✅ Успешно обработано {len(sellers)} результатов")
                 return sellers
-            elif response.status_code == 402:
-                self._log("❌ Ошибка: Нет подписки")
-            elif response.status_code == 403:
-                self._log("❌ Ошибка: Неверный api-key")
-            elif response.status_code == 404:
-                self._log("❌ Ошибка: Платформа не найдена")
-            elif response.status_code == 422:
-                self._log("❌ Ошибка: API ключ не передан")
-            elif response.status_code == 429:
-                self._log("❌ Ошибка: Превышен лимит запросов (1 в 5 сек)")
             else:
-                self._log(f"❌ Ошибка парсера: {response.status_code}")
+                self._log(f"❌ Ошибка: HTTP {response.status_code}")
+                if response.status_code == 402:
+                    self._log("  Причина: Нет подписки")
+                elif response.status_code == 403:
+                    self._log("  Причина: Неверный api-key")
+                elif response.status_code == 404:
+                    self._log("  Причина: Платформа не найдена")
+                elif response.status_code == 422:
+                    self._log("  Причина: API ключ не передан")
+                elif response.status_code == 429:
+                    self._log("  Причина: Превышен лимит запросов (1 в 5 сек)")
             
             return []
         except Exception as e:
             self._log(f"❌ Ошибка подключения: {e}")
+            import traceback
+            self._log(f"Traceback: {traceback.format_exc()}")
             return []
     
     def _start_send(self):
