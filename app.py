@@ -740,17 +740,17 @@ v3.4 - 2026-06-25"""
             try:
                 self._log(f"\n  📋 Профиль: {profile_id}")
                 
-                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
+                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start?automation=1"
                 headers = {"Authorization": "Bearer " + token}
                 
-                self._log(f"  📤 POST {url}")
-                self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
+                self._log(f"  📤 GET {url}")
+                self._log(f"  🔐 Headers: Authorization ******")
                 
                 # Retry-логика: до 3 попыток при ошибке соединения
                 response = None
                 for attempt in range(1, 4):
                     try:
-                        response = requests.post(url, headers=headers, timeout=30)
+                        response = requests.get(url, headers=headers, timeout=15)
                         break
                     except requests.exceptions.ConnectionError as e:
                         if attempt < 3:
@@ -766,15 +766,17 @@ v3.4 - 2026-06-25"""
                     driver_info = response.json()
                     self._log(f"  ✅ Ответ: {json.dumps(driver_info, indent=2)}")
                     
-                    # Ищем WebSocket URL
-                    ws_url = driver_info.get('webSocketDebuggerUrl', '')
-                    if not ws_url:
-                        self._log(f"  ❌ Ошибка: webSocketDebuggerUrl не найден в ответе")
+                    if not driver_info.get("success"):
+                        self._log(f"  ❌ Ошибка: Dolphin не смог запустить профиль {profile_id}")
                         continue
                     
-                    self._log(f"  🔗 WebSocket URL: {ws_url}")
+                    # Получаем порт из automation
+                    automation = driver_info.get("automation", {})
+                    driver_port = str(automation.get("port", ""))
+                    if not driver_port:
+                        self._log(f"  ❌ Ошибка: port не найден в ответе automation")
+                        continue
                     
-                    driver_port = ws_url.split(':')[-1]
                     self._log(f"  🔌 Порт: {driver_port}")
                     
                     options = webdriver.ChromeOptions()
