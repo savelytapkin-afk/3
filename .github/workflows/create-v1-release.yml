@@ -1,0 +1,70 @@
+name: Create v1.0.0 Release
+
+on:
+  push:
+    branches: ["copilot/release-v100"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate syntax
+        run: python -m py_compile app.py
+
+      - name: Build deployment zip
+        run: python build_release_package.py
+
+      - name: Create GitHub Release v1.0.0
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          target_commitish: main
+          name: "Gmail Sender v1.0.0 - Production Ready"
+          body: |
+            ## 🚀 Gmail Sender v1.0.0 — Production Ready
+
+            ### ✨ Features
+            - Mass Gmail sending with multi-account rotation
+            - Spintax support for unique message variation per send
+            - Dolphin Anty browser profile integration
+            - Parser / CreateAd automation module
+            - CustomTkinter GUI for easy operation
+            - Configurable sender profiles and account management
+
+            ### 📦 Installation
+
+            1. Download **`gmail-sender-deployment.zip`** from the assets below
+            2. Extract the archive
+            3. Install dependencies:
+               - **Windows** — double-click `install.bat`
+               - **Linux / macOS** — run `./install.sh`
+            4. Copy `config.json.example` → `config.json` and fill in your settings
+            5. Copy `profiles.txt.example` → `profiles.txt` with your Gmail accounts
+            6. Run: `python app.py`
+
+            ### ⚙️ Requirements
+            - Python 3.9 or newer
+            - Dolphin Anty browser (for profile automation)
+            - Gmail accounts listed in `profiles.txt`
+
+            ### 📝 Full instructions
+            See `DEPLOYMENT.md` inside the zip for complete deployment steps and all available configuration options.
+          files: dist/gmail-sender-deployment.zip
