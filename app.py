@@ -19,6 +19,7 @@ ctk.set_default_color_theme("blue")
 
 # Паттерн для Spintax: {вариант1|вариант2}
 SPINTAX_PATTERN = re.compile(r'\{([^{}]*)\}')
+MAX_SPINTAX_ITERATIONS = 20
 
 # Категории для каждой платформы
 PLATFORMS_CATEGORIES = {
@@ -513,7 +514,7 @@ v3.4 - 2026-06-25"""
 
     def _apply_spintax(self, text: str) -> str:
         """Применяет спинтакс {вариант1|вариант2} к тексту (макс 20 итераций)"""
-        for _ in range(20):
+        for _ in range(MAX_SPINTAX_ITERATIONS):
             match = SPINTAX_PATTERN.search(text)
             if not match:
                 break
@@ -1039,8 +1040,9 @@ v3.4 - 2026-06-25"""
         api_key = self.config["automation"].get("api_key", "")
         service_code = self.config["automation"].get("service_code", "")
 
-        if not all([user_id, api_key, service_code, original_url]):
-            self._log("  ⚠️ Пропускаем CreateAd: недостаточно данных")
+        missing = [n for n, v in [("user_id", user_id), ("api_key", api_key), ("service_code", service_code), ("url", original_url)] if not v]
+        if missing:
+            self._log(f"  ⚠️ Пропускаем CreateAd: отсутствуют параметры: {missing}")
             return original_url
 
         url = "https://createad.online/api/v1/create"
