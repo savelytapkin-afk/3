@@ -34,7 +34,7 @@ PLATFORMS_CATEGORIES = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Gmail Sender v3.0")
+        self.title("Gmail Sender v3.1")
         self.geometry("1400x800")
         
         self.running = False
@@ -98,8 +98,7 @@ class App(ctk.CTk):
         self.tabview = ctk.CTkTabview(main_frame)
         self.tabview.pack(fill="both", expand=True)
         
-        self.tab_token = self.tabview.add("🔑 Токен")
-        self.tab_profiles = self.tabview.add("👤 Профили")
+        self.tab_dolphin = self.tabview.add("🐬 Dolphin")
         self.tab_parser = self.tabview.add("🛰 Парсер")
         self.tab_templates = self.tabview.add("✉️ Шаблоны")
         self.tab_send = self.tabview.add("🚀 Отправка")
@@ -107,8 +106,7 @@ class App(ctk.CTk):
         self.tab_log = self.tabview.add("📋 Лог")
         self.tab_settings = self.tabview.add("⚙️ Настройки")
         
-        self._create_token_tab()
-        self._create_profiles_tab()
+        self._create_dolphin_tab()
         self._create_parser_tab()
         self._create_templates_tab()
         self._create_send_tab()
@@ -116,14 +114,15 @@ class App(ctk.CTk):
         self._create_log_tab()
         self._create_settings_tab()
     
-    def _create_token_tab(self):
-        """Вкладка токена Dolphin"""
-        frame = ctk.CTkFrame(self.tab_token)
+    def _create_dolphin_tab(self):
+        """Вкладка Dolphin с токеном и профилями"""
+        frame = ctk.CTkFrame(self.tab_dolphin)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        label = ctk.CTkLabel(frame, text="Dolphin Anty API Token:", font=("Arial", 14))
-        label.pack(pady=5)
+        # Токен
+        ctk.CTkLabel(frame, text="🔑 DOLPHIN ANTY TOKEN", font=("Arial", 14, "bold")).pack(pady=10)
         
+        ctk.CTkLabel(frame, text="API Token:", font=("Arial", 12)).pack()
         self.token_entry = ctk.CTkEntry(frame, width=400, show="*")
         self.token_entry.pack(pady=5)
         self.token_entry.insert(0, self.config.get("token", ""))
@@ -133,18 +132,19 @@ class App(ctk.CTk):
             self._save_config()
             messagebox.showinfo("Успех", "Токен сохранён")
         
-        btn = ctk.CTkButton(frame, text="Сохранить токен", command=save_token)
-        btn.pack(pady=10)
-    
-    def _create_profiles_tab(self):
-        """Вкладка профилей"""
-        frame = ctk.CTkFrame(self.tab_profiles)
-        frame.pack(fill="both", expand=True, padx=10, pady=10)
+        ctk.CTkButton(frame, text="💾 Сохранить токен", command=save_token).pack(pady=10)
         
-        label = ctk.CTkLabel(frame, text="ID профилей Dolphin (один на строку):", font=("Arial", 14))
-        label.pack(pady=5)
+        # Разделитель
+        ctk.CTkLabel(frame, text="", font=("Arial", 2)).pack()
+        ctk.CTkLabel(frame, text="―" * 60, font=("Arial", 10)).pack(pady=5)
+        ctk.CTkLabel(frame, text="", font=("Arial", 2)).pack()
         
-        self.profiles_text = ctk.CTkTextbox(frame, width=400, height=200)
+        # Профили
+        ctk.CTkLabel(frame, text="👤 ПРОФИЛИ DOLPHIN", font=("Arial", 14, "bold")).pack(pady=10)
+        
+        ctk.CTkLabel(frame, text="ID профилей (один на строку):", font=("Arial", 12)).pack()
+        
+        self.profiles_text = ctk.CTkTextbox(frame, width=400, height=150)
         self.profiles_text.pack(pady=5, fill="both", expand=True)
         
         def load_profiles():
@@ -157,8 +157,16 @@ class App(ctk.CTk):
             except Exception as e:
                 messagebox.showerror("Ошибка", str(e))
         
-        btn = ctk.CTkButton(frame, text="Загрузить из файла", command=load_profiles)
-        btn.pack(pady=5)
+        btn_frame = ctk.CTkFrame(frame)
+        btn_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkButton(btn_frame, text="📂 Загрузить из файла", command=load_profiles).pack(side="left", padx=5)
+        
+        def clear_profiles():
+            if messagebox.askyesno("Подтверждение", "Очистить все профили?"):
+                self.profiles_text.delete("1.0", tk.END)
+        
+        ctk.CTkButton(btn_frame, text="🗑️ Очистить", command=clear_profiles, fg_color="red").pack(side="left", padx=5)
     
     def _create_parser_tab(self):
         """Вкладка парсера с фильтрами"""
@@ -468,10 +476,11 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_settings)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="Gmail Sender v3.0", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(frame, text="Gmail Sender v3.1", font=("Arial", 18, "bold")).pack(pady=10)
         ctk.CTkLabel(frame, text="Автоматизация рассылки писем с интеллектуальным парсером", font=("Arial", 12)).pack(pady=5)
         
-        info = """✅ Динамический парсер всех платформ
+        info = """✅ Вкладка "Dolphin" с токеном и профилями
+✅ Динамический парсер всех платформ
 ✅ Выбор категории и фильтров для свежих email-ов
 ✅ Сохранение пресетов фильтров
 ✅ Отправка первых писем через Gmail
@@ -479,7 +488,7 @@ class App(ctk.CTk):
 ✅ Интеграция с CreateAd API
 ✅ Персонализация писем {title}, {price}, {name}
 
-v3.0 - 2026-06-25"""
+v3.1 - 2026-06-25"""
         
         ctk.CTkLabel(frame, text=info, font=("Arial", 11), justify="left").pack(pady=10)
     
