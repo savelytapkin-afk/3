@@ -34,7 +34,7 @@ PLATFORMS_CATEGORIES = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Gmail Sender v3.3")
+        self.title("Gmail Sender v3.4")
         self.geometry("1400x800")
         
         self.running = False
@@ -51,6 +51,9 @@ class App(ctk.CTk):
         try:
             with open('config.json', 'r') as f:
                 self.config = json.load(f)
+            # Нормализуем токен при загрузке
+            if "token" in self.config:
+                self.config["token"] = self.config["token"].strip()
         except:
             self.config = {
                 "token": "",
@@ -128,7 +131,7 @@ class App(ctk.CTk):
         self.token_entry.insert(0, self.config.get("token", ""))
         
         def save_token():
-            self.config["token"] = self.token_entry.get()
+            self.config["token"] = self.token_entry.get().strip()
             self._save_config()
             messagebox.showinfo("Успех", "Токен сохранён")
         
@@ -476,7 +479,7 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_settings)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="Gmail Sender v3.3", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(frame, text="Gmail Sender v3.4", font=("Arial", 18, "bold")).pack(pady=10)
         ctk.CTkLabel(frame, text="Автоматизация рассылки писем с интеллектуальным парсером", font=("Arial", 12)).pack(pady=5)
         
         info = """✅ Вкладка "Dolphin" с токеном и профилями
@@ -489,8 +492,12 @@ class App(ctk.CTk):
 ✅ Персонализация писем {title}, {price}, {name}
 ✅ Подробное логирование Dolphin API
 ✅ Подробное логирование парсера API
+✅ Исправлен endpoint Dolphin API (v1.0/browser_profiles/{id}/start)
+✅ Нормализация токена (.strip())
+✅ Валидация токена перед открытием профилей
+✅ Retry-логика для localhost:3001
 
-v3.3 - 2026-06-25"""
+v3.4 - 2026-06-25"""
         
         ctk.CTkLabel(frame, text=info, font=("Arial", 11), justify="left").pack(pady=10)
     
@@ -663,6 +670,10 @@ v3.3 - 2026-06-25"""
             self.sellers_data = {item['email']: item for item in emails_data}
             
             self._log("\n🌐 Открытие профилей Dolphin...")
+            if not self._validate_dolphin_token():
+                self._log("❌ Токен Dolphin недействителен, прерываем запуск")
+                self._stop_send()
+                return
             self.drivers_pool = self._open_profiles(profiles)
             if not self.drivers_pool:
                 self._log("❌ Не удалось открыть профили")
@@ -684,10 +695,43 @@ v3.3 - 2026-06-25"""
             if self.running:
                 self._stop_send()
     
+    def _validate_dolphin_token(self) -> bool:
+        """Проверяет токен Dolphin перед массовым открытием профилей"""
+        token = self.config.get("token", "").strip()
+        if not token:
+            self._log("❌ Токен Dolphin не установлен!")
+            return False
+
+        self._log("\n🔍 Проверка токена Dolphin...")
+        url = "http://localhost:3001/v1.0/browser_profiles"
+        headers = {"Authorization": "Bearer " + token}
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                self._log("✅ Токен Dolphin действителен")
+                return True
+            elif response.status_code in (401, 403):
+                self._log(f"❌ Ошибка авторизации Dolphin (HTTP {response.status_code}): invalid session token")
+                self._log("  💡 Проверьте токен в настройках Dolphin Anty (Настройки → API)")
+                try:
+                    self._log(f"  📋 Ответ: {response.json()}")
+                except Exception:
+                    self._log(f"  📋 Ответ: {response.text}")
+                return False
+            else:
+                self._log(f"⚠️ Неожиданный статус при проверке токена: HTTP {response.status_code}")
+                return True  # Продолжаем, но предупреждаем
+        except requests.exceptions.ConnectionError:
+            self._log("❌ Dolphin Anty недоступен на localhost:3001. Запустите приложение Dolphin Anty.")
+            return False
+        except requests.exceptions.Timeout:
+            self._log("❌ Timeout при проверке токена Dolphin (localhost:3001)")
+            return False
+
     def _open_profiles(self, profile_ids: list) -> dict:
         """Открывает профили Dolphin с подробным логированием"""
         drivers = {}
-        token = self.config.get("token", "")
+        token = self.config.get("token", "").strip()
         
         if not token:
             self._log("❌ Ошибка: Токен не установлен!")
@@ -697,15 +741,24 @@ v3.3 - 2026-06-25"""
             try:
                 self._log(f"\n  📋 Профиль: {profile_id}")
                 
-                url = "http://localhost:3001/v1/browser/start-browser"
-                payload = {"browserId": profile_id}
-                headers = {"Authorization": f"Bearer {token}"}
+                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
+                headers = {"Authorization": "Bearer " + token}
                 
                 self._log(f"  📤 POST {url}")
-                self._log(f"  📦 Body: {payload}")
-                self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
+                self._log(f"  🔐 Headers: Authorization ******")
                 
-                response = requests.post(url, json=payload, headers=headers, timeout=30)
+                # Retry-логика: до 3 попыток при ошибке соединения
+                response = None
+                for attempt in range(1, 4):
+                    try:
+                        response = requests.post(url, headers=headers, timeout=30)
+                        break
+                    except requests.exceptions.ConnectionError as e:
+                        if attempt < 3:
+                            self._log(f"  ⚠️ Попытка {attempt}/3 неудачна, повтор через 3 сек...")
+                            time.sleep(3)
+                        else:
+                            raise
                 
                 self._log(f"  📥 Status Code: {response.status_code}")
                 self._log(f"  📥 Response: {response.text}")
@@ -731,12 +784,21 @@ v3.3 - 2026-06-25"""
                     
                     drivers[profile_id] = driver
                     self._log(f"  ✅ Профиль {profile_id} успешно открыт!")
+                elif response.status_code in (401, 403):
+                    self._log(f"  ❌ Ошибка авторизации Dolphin (HTTP {response.status_code}): invalid session token")
+                    self._log("  💡 Обновите токен во вкладке 🐬 Dolphin (Настройки Dolphin Anty → API)")
+                    try:
+                        error_data = response.json()
+                        self._log(f"  📋 Error Details: {json.dumps(error_data, indent=2)}")
+                    except Exception:
+                        self._log(f"  📋 Response Body: {response.text}")
+                    break  # Нет смысла продолжать с невалидным токеном
                 else:
                     self._log(f"  ❌ HTTP Error: {response.status_code}")
                     try:
                         error_data = response.json()
                         self._log(f"  📋 Error Details: {json.dumps(error_data, indent=2)}")
-                    except:
+                    except Exception:
                         self._log(f"  📋 Response Body: {response.text}")
             
             except requests.exceptions.ConnectionError as e:
@@ -750,7 +812,6 @@ v3.3 - 2026-06-25"""
                 self._log(f"  📋 Traceback: {traceback.format_exc()}")
         
         return drivers
-    
     def _send_first_emails(self, emails_data: list, profiles: list):
         """Отправляет письма"""
         delay = self.config["automation"].get("delay", 5)
