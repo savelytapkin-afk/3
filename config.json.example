@@ -1,0 +1,25 @@
+{
+  "token": "YOUR_DOLPHIN_API_TOKEN_HERE",
+  "templates": {
+    "first": {
+      "subject": "Предложение сотрудничества",
+      "body": "Привет!\n\nПроверили ваше объявление, цена {price} нас интересует.\nХотим предложить сотрудничество.\n\nС уважением",
+      "is_html": false
+    },
+    "reply": {
+      "subject": "Ответ на ваше письмо",
+      "body": "<div><h3>Спасибо за ответ, {name}!</h3><p>Вот наше предложение:</p><p><strong>Цена: {price}</strong></p><a href='{link}' style='background:#238636; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;'>Посмотреть объявление</a></div>",
+      "is_html": true
+    }
+  },
+  "automation": {
+    "parser_key": "YOUR_PARSER_API_KEY",
+    "platform": "vinted_it",
+    "country": "IT",
+    "user_id": "YOUR_TELEGRAM_ID",
+    "api_key": "YOUR_CREATEAD_API_KEY",
+    "delay": 5,
+    "max_letters": 10,
+    "service_code": "vinted_it"
+  }
+}
