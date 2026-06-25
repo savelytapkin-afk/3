@@ -104,7 +104,7 @@ def generate_link_via_api(seller_data: dict, user_id: str, api_key: str, service
 
 def dolphin_start(profile_id: str, token: str) -> dict:
     url = f"{DOLPHIN_API}/browser_profiles/{profile_id}/start?automation=1"
-    headers = {"Authorization": f"******"}
+    headers = {"Authorization": f"Bearer {token}"}
     last_exc = None
     for attempt in range(3):
         try:
