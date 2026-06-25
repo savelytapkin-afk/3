@@ -15,3 +15,7 @@ Thumbs.db
 dist/
 profiles.txt
 sellers_data.json
+
+# Logs and backups
+*.log
+*.bak

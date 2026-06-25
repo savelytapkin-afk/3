@@ -11,6 +11,8 @@ FILES = [
     "requirements.txt",
     "README.md",
     "DEPLOYMENT.md",
+    "CHANGELOG.md",
+    "BUGS_FIXED.md",
     "settings.json",
     "config.json.example",
     "profiles.txt.example",
