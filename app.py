@@ -6,10 +6,11 @@ Gmail Sender + CreateAd — Полная автоматизация
 import re
 import time
 import json
+import csv
 import threading
 import requests
 import customtkinter as ctk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, ttk
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -25,6 +26,7 @@ ctk.set_default_color_theme("dark-blue")
 DOLPHIN_API = "http://localhost:3001/v1.0"
 PARSER_API = "http://vvsproject.xyz/ads"
 CREATEAD_API = "https://www-gumau.world/api/createAd"
+PARSER_API_TIMEOUT = 45
 
 SERVICE_CODES = ["vinted_it", "vinted_nl", "vinted_es", "vinted_dk", "vinted_be", "vinted_de", "subito_it", "wallapop_es"]
 
@@ -221,6 +223,269 @@ def check_and_reply(driver, reply_body: str, user_id: str, api_key: str, service
 
     return replied
 
+class ParserFrame(ctk.CTkFrame):
+    FILTER_DEFAULTS = {
+        "platform": "vinted_it",
+        "country": "",
+        "category": "",
+        "price": "",
+        "ads": "0..",
+        "reviews": "0..",
+        "publication": "24h",
+        "delivery": False,
+        "phone": False,
+        "limit": "50"
+    }
+
+    def __init__(self, master, settings_config: dict, save_settings_callback):
+        super().__init__(master)
+        self.settings_config = settings_config
+        self.save_settings_callback = save_settings_callback
+        self.search_thread = None
+        self.results = []
+
+        self._ensure_defaults()
+        self._build_ui()
+        self._apply_filters(self.settings_config["parser_filters"])
+
+    @classmethod
+    def apply_filter_defaults(cls, settings_config):
+        filters = settings_config.setdefault("parser_filters", {})
+        for key, value in cls.FILTER_DEFAULTS.items():
+            filters.setdefault(key, value)
+        return filters
+
+    def _ensure_defaults(self):
+        self.apply_filter_defaults(self.settings_config)
+
+    def _build_ui(self):
+        filters_panel = ctk.CTkFrame(self)
+        filters_panel.pack(fill="x", padx=10, pady=(10, 5))
+
+        top_row = ctk.CTkFrame(filters_panel)
+        top_row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(top_row, text="Платформа:", width=130, anchor="w").pack(side="left")
+        self.platform_var = ctk.StringVar(value=self.FILTER_DEFAULTS["platform"])
+        self.platform_menu = ctk.CTkOptionMenu(top_row, values=SERVICE_CODES, variable=self.platform_var)
+        self.platform_menu.pack(side="left", padx=5)
+        ctk.CTkLabel(top_row, text="Страна:", width=80, anchor="w").pack(side="left", padx=(10, 0))
+        self.country_entry = ctk.CTkEntry(top_row, placeholder_text="Italy")
+        self.country_entry.pack(side="left", padx=5, fill="x", expand=True)
+
+        second_row = ctk.CTkFrame(filters_panel)
+        second_row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(second_row, text="Категория:", width=130, anchor="w").pack(side="left")
+        self.category_entry = ctk.CTkEntry(second_row, placeholder_text="men_shoes")
+        self.category_entry.pack(side="left", padx=5, fill="x", expand=True)
+        ctk.CTkLabel(second_row, text="Лимит:", width=80, anchor="w").pack(side="left", padx=(10, 0))
+        self.limit_entry = ctk.CTkEntry(second_row, width=100, placeholder_text="50")
+        self.limit_entry.pack(side="left", padx=5)
+
+        third_row = ctk.CTkFrame(filters_panel)
+        third_row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(third_row, text="Цена (min..max):", width=130, anchor="w").pack(side="left")
+        self.price_entry = ctk.CTkEntry(third_row, placeholder_text="10..100")
+        self.price_entry.pack(side="left", padx=5, fill="x", expand=True)
+        ctk.CTkLabel(third_row, text="Объявлений (min..):", width=150, anchor="w").pack(side="left", padx=(10, 0))
+        self.ads_entry = ctk.CTkEntry(third_row, width=120, placeholder_text="0..")
+        self.ads_entry.pack(side="left", padx=5)
+
+        fourth_row = ctk.CTkFrame(filters_panel)
+        fourth_row.pack(fill="x", padx=8, pady=4)
+        ctk.CTkLabel(fourth_row, text="Отзывов (min..):", width=130, anchor="w").pack(side="left")
+        self.reviews_entry = ctk.CTkEntry(fourth_row, placeholder_text="0..")
+        self.reviews_entry.pack(side="left", padx=5, fill="x", expand=True)
+        ctk.CTkLabel(fourth_row, text="Время публикации:", width=150, anchor="w").pack(side="left", padx=(10, 0))
+        self.publication_var = ctk.StringVar(value=self.FILTER_DEFAULTS["publication"])
+        self.publication_menu = ctk.CTkOptionMenu(fourth_row, values=["5m", "1h", "24h", "7d"], variable=self.publication_var)
+        self.publication_menu.pack(side="left", padx=5)
+
+        fifth_row = ctk.CTkFrame(filters_panel)
+        fifth_row.pack(fill="x", padx=8, pady=(4, 8))
+        self.delivery_var = ctk.BooleanVar(value=False)
+        self.phone_var = ctk.BooleanVar(value=False)
+        self.delivery_checkbox = ctk.CTkCheckBox(fifth_row, text="Доставка (true)", variable=self.delivery_var)
+        self.delivery_checkbox.pack(side="left", padx=5)
+        self.phone_checkbox = ctk.CTkCheckBox(fifth_row, text="Телефон (true)", variable=self.phone_var)
+        self.phone_checkbox.pack(side="left", padx=15)
+
+        buttons = ctk.CTkFrame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 5))
+        self.search_btn = ctk.CTkButton(buttons, text="🔍 Поиск", command=self._start_search, width=140)
+        self.search_btn.pack(side="left", padx=5)
+        ctk.CTkButton(buttons, text="🧹 Очистить фильтры", command=self._clear_filters, width=160).pack(side="left", padx=5)
+        ctk.CTkButton(buttons, text="💾 Экспорт в CSV", command=self._export_csv, width=150).pack(side="left", padx=5)
+        self.status_label = ctk.CTkLabel(buttons, text="Статус: готов")
+        self.status_label.pack(side="left", padx=15)
+
+        table_wrap = ctk.CTkFrame(self)
+        table_wrap.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        columns = ("link", "title", "price", "seller", "reviews", "date")
+        self.results_table = ttk.Treeview(table_wrap, columns=columns, show="headings", height=12)
+        self.results_table.heading("link", text="Ссылка")
+        self.results_table.heading("title", text="Название")
+        self.results_table.heading("price", text="Цена")
+        self.results_table.heading("seller", text="Продавец")
+        self.results_table.heading("reviews", text="Отзывы")
+        self.results_table.heading("date", text="Дата")
+        self.results_table.column("link", width=300, anchor="w")
+        self.results_table.column("title", width=260, anchor="w")
+        self.results_table.column("price", width=90, anchor="center")
+        self.results_table.column("seller", width=140, anchor="w")
+        self.results_table.column("reviews", width=80, anchor="center")
+        self.results_table.column("date", width=150, anchor="center")
+        self.results_table.pack(side="left", fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(table_wrap, orient="vertical", command=self.results_table.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.results_table.configure(yscrollcommand=scrollbar.set)
+
+    def _set_entry(self, entry, value):
+        entry.delete(0, "end")
+        entry.insert(0, value)
+
+    def _to_bool(self, value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() == "true"
+        return bool(value)
+
+    def _apply_filters(self, filters):
+        self.platform_var.set(filters.get("platform", self.FILTER_DEFAULTS["platform"]))
+        self._set_entry(self.country_entry, filters.get("country", ""))
+        self._set_entry(self.category_entry, filters.get("category", ""))
+        self._set_entry(self.price_entry, filters.get("price", ""))
+        self._set_entry(self.ads_entry, filters.get("ads", ""))
+        self._set_entry(self.reviews_entry, filters.get("reviews", ""))
+        publication = filters.get("publication", self.FILTER_DEFAULTS["publication"])
+        if publication not in {"5m", "1h", "24h", "7d"}:
+            publication = self.FILTER_DEFAULTS["publication"]
+        self.publication_var.set(publication)
+        self.delivery_var.set(self._to_bool(filters.get("delivery", False)))
+        self.phone_var.set(self._to_bool(filters.get("phone", False)))
+        self._set_entry(self.limit_entry, str(filters.get("limit", "50")))
+
+    def _collect_filters(self):
+        limit = self.limit_entry.get().strip() or "50"
+        return {
+            "platform": self.platform_var.get(),
+            "country": self.country_entry.get().strip(),
+            "category": self.category_entry.get().strip(),
+            "price": self.price_entry.get().strip(),
+            "ads": self.ads_entry.get().strip(),
+            "reviews": self.reviews_entry.get().strip(),
+            "publication": self.publication_var.get().strip(),
+            "delivery": bool(self.delivery_var.get()),
+            "phone": bool(self.phone_var.get()),
+            "limit": limit
+        }
+
+    def _save_filters(self, filters):
+        self.settings_config["parser_filters"] = dict(filters)
+        self.save_settings_callback()
+
+    def _start_search(self):
+        if self.search_thread and self.search_thread.is_alive():
+            return
+        filters = self._collect_filters()
+        self._save_filters(filters)
+        self.search_btn.configure(state="disabled")
+        self.status_label.configure(text="Статус: поиск...")
+        self.search_thread = threading.Thread(target=self._search_thread, args=(filters,), daemon=True)
+        self.search_thread.start()
+
+    def _search_thread(self, filters):
+        try:
+            params = {
+                "country": filters["country"],
+                "category": filters["category"],
+                "limit": filters["limit"],
+                "price": filters["price"],
+                "ads": filters["ads"],
+                "reviews": filters["reviews"],
+                "publication": filters["publication"],
+                "delivery": "true" if filters["delivery"] else "false",
+                "phone": "true" if filters["phone"] else "false"
+            }
+            clean_params = {k: v for k, v in params.items() if v != ""}
+            response = requests.get(f"{PARSER_API}/{filters['platform']}", params=clean_params, timeout=PARSER_API_TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+            rows = self._normalize_rows(data)
+            self.after(0, lambda: self._show_results(rows, f"Статус: найдено {len(rows)}"))
+        except requests.RequestException as exc:
+            self.after(0, lambda: self._show_error(f"Ошибка API: {exc}"))
+        except ValueError:
+            self.after(0, lambda: self._show_error("Ошибка API: некорректный JSON"))
+        except Exception as exc:
+            self.after(0, lambda: self._show_error(f"Ошибка: {exc}"))
+
+    def _normalize_rows(self, data):
+        if isinstance(data, dict):
+            items = list(data.values())
+        elif isinstance(data, list):
+            items = data
+        else:
+            items = []
+
+        rows = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            rows.append({
+                "link": str(item.get("link") or item.get("url") or item.get("item_url") or ""),
+                "title": str(item.get("title") or item.get("name") or ""),
+                "price": str(item.get("price") or ""),
+                "seller": str(item.get("seller") or item.get("seller_name") or item.get("username") or ""),
+                "reviews": str(item.get("reviews") or item.get("feedbacks") or item.get("rating_count") or ""),
+                "date": str(item.get("date") or item.get("publication") or item.get("published_at") or item.get("created_at") or "")
+            })
+        return rows
+
+    def _show_results(self, rows, status_text):
+        self.results = rows
+        for item in self.results_table.get_children():
+            self.results_table.delete(item)
+        for row in rows:
+            self.results_table.insert(
+                "",
+                "end",
+                values=(row["link"], row["title"], row["price"], row["seller"], row["reviews"], row["date"])
+            )
+        self.status_label.configure(text=status_text)
+        self.search_btn.configure(state="normal")
+
+    def _show_error(self, text):
+        self.status_label.configure(text="Статус: ошибка")
+        self.search_btn.configure(state="normal")
+        messagebox.showerror("Парсер", text)
+
+    def _clear_filters(self):
+        self._apply_filters(dict(self.FILTER_DEFAULTS))
+        filters = self._collect_filters()
+        self._save_filters(filters)
+        self.status_label.configure(text="Статус: фильтры очищены")
+
+    def _export_csv(self):
+        if not self.results:
+            messagebox.showwarning("Парсер", "Нет результатов для экспорта")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Сохранить CSV",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if not path:
+            return
+        with open(path, "w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["link", "title", "price", "seller", "reviews", "date"])
+            for row in self.results:
+                writer.writerow([row["link"], row["title"], row["price"], row["seller"], row["reviews"], row["date"]])
+        self.status_label.configure(text=f"Статус: CSV сохранён ({len(self.results)})")
+
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -249,8 +514,9 @@ class App(ctk.CTk):
             self.settings_config = {
                 "templates": {"first": {"subject": "", "body": ""}, "reply": {"subject": "", "body": ""}},
                 "automation": {"parser_key": "", "platform": "vinted", "country": "IT", "user_id": "", "api_key": "", "delay": 5, "service_code": "vinted_it"},
-                "parser_filters": {"limit": "50"}
+                "parser_filters": dict(ParserFrame.FILTER_DEFAULTS)
             }
+        ParserFrame.apply_filter_defaults(self.settings_config)
     
     def _save_dolphin_config(self):
         with open('dolphin.json', 'w', encoding='utf-8') as f:
@@ -273,12 +539,14 @@ class App(ctk.CTk):
         self.tabview.add("🔑 Токен")
         self.tabview.add("👤 Профили")
         self.tabview.add("✉️ Шаблоны")
+        self.tabview.add("🔍 Парсер")
         self.tabview.add("🚀 Запуск")
         self.tabview.add("📋 Лог")
         
         self._setup_token_tab()
         self._setup_profiles_tab()
         self._setup_templates_tab()
+        self._setup_parser_tab()
         self._setup_automation_tab()
         self._setup_log_tab()
         
@@ -434,6 +702,11 @@ class App(ctk.CTk):
         
         self.status = ctk.CTkLabel(frame, text="⚪ Готов", font=("Arial", 12, "bold"))
         self.status.pack(pady=10)
+
+    def _setup_parser_tab(self):
+        tab = self.tabview.tab("🔍 Парсер")
+        self.parser_frame = ParserFrame(tab, self.settings_config, self._save_settings_config)
+        self.parser_frame.pack(fill="both", expand=True)
     
     def _start_automation(self):
         profiles = self._get_profiles()
