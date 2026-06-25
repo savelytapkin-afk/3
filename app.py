@@ -26,9 +26,9 @@ ctk.set_default_color_theme("dark-blue")
 DOLPHIN_API = "http://localhost:3001/v1.0"
 PARSER_API = "http://vvsproject.xyz/ads"
 CREATEAD_API = "https://www-gumau.world/api/createAd"
+PARSER_API_TIMEOUT = 45
 
 SERVICE_CODES = ["vinted_it", "vinted_nl", "vinted_es", "vinted_dk", "vinted_be", "vinted_de", "subito_it", "wallapop_es"]
-PARSER_PLATFORMS = ["vinted_it", "vinted_nl", "vinted_es", "vinted_dk", "vinted_be", "vinted_de", "subito_it", "wallapop_es"]
 
 def spintax(text: str) -> str:
     import random
@@ -248,10 +248,15 @@ class ParserFrame(ctk.CTkFrame):
         self._build_ui()
         self._apply_filters(self.settings_config["parser_filters"])
 
-    def _ensure_defaults(self):
-        filters = self.settings_config.setdefault("parser_filters", {})
-        for key, value in self.FILTER_DEFAULTS.items():
+    @classmethod
+    def apply_filter_defaults(cls, settings_config):
+        filters = settings_config.setdefault("parser_filters", {})
+        for key, value in cls.FILTER_DEFAULTS.items():
             filters.setdefault(key, value)
+        return filters
+
+    def _ensure_defaults(self):
+        self.apply_filter_defaults(self.settings_config)
 
     def _build_ui(self):
         filters_panel = ctk.CTkFrame(self)
@@ -261,7 +266,7 @@ class ParserFrame(ctk.CTkFrame):
         top_row.pack(fill="x", padx=8, pady=4)
         ctk.CTkLabel(top_row, text="Платформа:", width=130, anchor="w").pack(side="left")
         self.platform_var = ctk.StringVar(value=self.FILTER_DEFAULTS["platform"])
-        self.platform_menu = ctk.CTkOptionMenu(top_row, values=PARSER_PLATFORMS, variable=self.platform_var)
+        self.platform_menu = ctk.CTkOptionMenu(top_row, values=SERVICE_CODES, variable=self.platform_var)
         self.platform_menu.pack(side="left", padx=5)
         ctk.CTkLabel(top_row, text="Страна:", width=80, anchor="w").pack(side="left", padx=(10, 0))
         self.country_entry = ctk.CTkEntry(top_row, placeholder_text="Italy")
@@ -405,7 +410,7 @@ class ParserFrame(ctk.CTkFrame):
                 "phone": "true" if filters["phone"] else "false"
             }
             clean_params = {k: v for k, v in params.items() if v != ""}
-            response = requests.get(f"{PARSER_API}/{filters['platform']}", params=clean_params, timeout=45)
+            response = requests.get(f"{PARSER_API}/{filters['platform']}", params=clean_params, timeout=PARSER_API_TIMEOUT)
             response.raise_for_status()
             data = response.json()
             rows = self._normalize_rows(data)
@@ -496,7 +501,6 @@ class App(ctk.CTk):
         self._setup_ui()
         
     def _load_configs(self):
-        parser_filter_defaults = dict(ParserFrame.FILTER_DEFAULTS)
         try:
             with open('dolphin.json', 'r', encoding='utf-8') as f:
                 self.dolphin_config = json.load(f)
@@ -510,11 +514,9 @@ class App(ctk.CTk):
             self.settings_config = {
                 "templates": {"first": {"subject": "", "body": ""}, "reply": {"subject": "", "body": ""}},
                 "automation": {"parser_key": "", "platform": "vinted", "country": "IT", "user_id": "", "api_key": "", "delay": 5, "service_code": "vinted_it"},
-                "parser_filters": parser_filter_defaults
+                "parser_filters": dict(ParserFrame.FILTER_DEFAULTS)
             }
-        filters = self.settings_config.setdefault("parser_filters", {})
-        for key, value in parser_filter_defaults.items():
-            filters.setdefault(key, value)
+        ParserFrame.apply_filter_defaults(self.settings_config)
     
     def _save_dolphin_config(self):
         with open('dolphin.json', 'w', encoding='utf-8') as f:
