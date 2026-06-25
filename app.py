@@ -492,7 +492,7 @@ class App(ctk.CTk):
 ✅ Проверка ответов и рассылка HTML
 ✅ Интеграция с CreateAd API
 ✅ Персонализация писем {title}, {price}, {name}
-✅ Dolphin API переключён на Cloud API (browser_profiles/{id}/start)
+✅ Dolphin API переключён на Cloud API (https://dolphin-anty-api.com/browser_profiles/{id}/start)
 ✅ Нормализация токена (.strip())
 ✅ Валидация токена перед открытием профилей
 ✅ Retry-логика для подключения
