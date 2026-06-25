@@ -6,6 +6,7 @@ import json
 import time
 import requests
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,6 +15,40 @@ import re
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+DOLPHIN_API = "http://localhost:3001/v1.0"
+
+
+def dolphin_start(profile_id: str, token: str) -> dict:
+    url = f"{DOLPHIN_API}/browser_profiles/{profile_id}/start?automation=1"
+    headers = {"Authorization": "Bearer " + token}
+    r = requests.get(url, headers=headers, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    if not data.get("success"):
+        raise RuntimeError(f"Dolphin: не удалось запустить профиль {profile_id}")
+    return data["automation"]
+
+
+def dolphin_stop(profile_id: str, token: str):
+    try:
+        headers = {"Authorization": "Bearer " + token}
+        requests.get(f"{DOLPHIN_API}/browser_profiles/{profile_id}/stop",
+                     headers=headers, timeout=10)
+    except Exception:
+        pass
+
+
+def get_driver(automation: dict) -> webdriver.Remote:
+    from selenium.webdriver.chrome.service import Service
+    opts = Options()
+    opts.add_experimental_option("debuggerAddress", f"127.0.0.1:{automation['port']}")
+    driver_path = automation.get("webdriver", "")
+    if driver_path:
+        service = Service(executable_path=driver_path)
+        return webdriver.Chrome(service=service, options=opts)
+    else:
+        return webdriver.Chrome(options=opts)
 
 # Категории для каждой платформы
 PLATFORMS_CATEGORIES = {
@@ -514,7 +549,7 @@ v3.4 - 2026-06-25"""
             return False
         
         self._log("\n🔍 Проверка токена Dolphin...")
-        url = "http://localhost:3001/v1.0/browser_profiles"
+        url = f"{DOLPHIN_API}/browser_profiles"
         headers = {"Authorization": "Bearer " + token}
         try:
             response = requests.get(url, headers=headers, timeout=10)
@@ -524,19 +559,15 @@ v3.4 - 2026-06-25"""
             elif response.status_code in (401, 403):
                 self._log(f"❌ Ошибка авторизации Dolphin (HTTP {response.status_code}): invalid session token")
                 self._log("  💡 Проверьте токен в настройках Dolphin Anty (Настройки → API)")
-                try:
-                    self._log(f"  📋 Ответ: {response.json()}")
-                except Exception:
-                    self._log(f"  📋 Ответ: {response.text}")
                 return False
             else:
-                self._log(f"⚠️ Неожиданный статус при проверке токена: HTTP {response.status_code}")
-                return True  # Продолжаем, но предупреждаем
+                self._log(f"⚠️ Неожиданный статус: HTTP {response.status_code}")
+                return True
         except requests.exceptions.ConnectionError:
             self._log("❌ Dolphin Anty недоступен на localhost:3001. Запустите приложение Dolphin Anty.")
             return False
         except requests.exceptions.Timeout:
-            self._log("❌ Timeout при проверке токена Dolphin (localhost:3001)")
+            self._log("❌ Timeout при проверке токена Dolphin")
             return False
     
     def _parse_emails(self) -> list:
@@ -728,7 +759,7 @@ v3.4 - 2026-06-25"""
                 self._stop_send()
     
     def _open_profiles(self, profile_ids: list) -> dict:
-        """Открывает профили Dolphin с подробным логированием"""
+        """Открывает профили Dolphin"""
         drivers = {}
         token = self.config.get("token", "").strip()
         
@@ -739,76 +770,15 @@ v3.4 - 2026-06-25"""
         for profile_id in profile_ids:
             try:
                 self._log(f"\n  📋 Профиль: {profile_id}")
-                
-                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
-                headers = {"Authorization": "Bearer " + token}
-                
-                self._log(f"  📤 POST {url}")
-                self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
-                
-                # Retry-логика: до 3 попыток при ошибке соединения
-                response = None
-                for attempt in range(1, 4):
-                    try:
-                        response = requests.post(url, headers=headers, timeout=30)
-                        break
-                    except requests.exceptions.ConnectionError as e:
-                        if attempt < 3:
-                            self._log(f"  ⚠️ Попытка {attempt}/3 неудачна, повтор через 3 сек...")
-                            time.sleep(3)
-                        else:
-                            raise
-                
-                self._log(f"  📥 Status Code: {response.status_code}")
-                self._log(f"  📥 Response: {response.text}")
-                
-                if response.status_code == 200:
-                    driver_info = response.json()
-                    self._log(f"  ✅ Ответ: {json.dumps(driver_info, indent=2)}")
-                    
-                    # Ищем WebSocket URL
-                    ws_url = driver_info.get('webSocketDebuggerUrl', '')
-                    if not ws_url:
-                        self._log(f"  ❌ Ошибка: webSocketDebuggerUrl не найден в ответе")
-                        continue
-                    
-                    self._log(f"  🔗 WebSocket URL: {ws_url}")
-                    
-                    driver_port = ws_url.split(':')[-1]
-                    self._log(f"  🔌 Порт: {driver_port}")
-                    
-                    options = webdriver.ChromeOptions()
-                    options.add_experimental_option('debuggerAddress', f'localhost:{driver_port}')
-                    driver = webdriver.Chrome(options=options)
-                    
-                    drivers[profile_id] = driver
-                    self._log(f"  ✅ Профиль {profile_id} успешно открыт!")
-                elif response.status_code in (401, 403):
-                    self._log(f"  ❌ Ошибка авторизации Dolphin (HTTP {response.status_code}): invalid session token")
-                    self._log("  💡 Обновите токен во вкладке 🐬 Dolphin (Настройки Dolphin Anty → API)")
-                    try:
-                        error_data = response.json()
-                        self._log(f"  📋 Error Details: {json.dumps(error_data, indent=2)}")
-                    except Exception:
-                        self._log(f"  📋 Response Body: {response.text}")
-                    break  # Нет смысла продолжать с невалидным токеном
-                else:
-                    self._log(f"  ❌ HTTP Error: {response.status_code}")
-                    try:
-                        error_data = response.json()
-                        self._log(f"  📋 Error Details: {json.dumps(error_data, indent=2)}")
-                    except:
-                        self._log(f"  📋 Response Body: {response.text}")
-            
+                auto = dolphin_start(profile_id, token)
+                driver = get_driver(auto)
+                drivers[profile_id] = driver
+                self._log(f"  ✅ Профиль {profile_id} успешно открыт!")
             except requests.exceptions.ConnectionError as e:
                 self._log(f"  ❌ Ошибка подключения: {e}")
                 self._log(f"  💡 Проверьте: запущен ли Dolphin Anty на localhost:3001?")
-            except requests.exceptions.Timeout as e:
-                self._log(f"  ❌ Timeout: {e}")
             except Exception as e:
-                self._log(f"  ❌ Неожиданная ошибка: {e}")
-                import traceback
-                self._log(f"  📋 Traceback: {traceback.format_exc()}")
+                self._log(f"  ❌ Ошибка: {e}")
         
         return drivers
     
