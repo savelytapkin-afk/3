@@ -3,8 +3,8 @@
   "token": "YOUR_DOLPHIN_API_TOKEN_HERE",
   "templates": {
     "first": {
-      "subject": "Предложение сотрудничества",
-      "body": "Привет!\n\nПроверили ваше объявление, цена {price} нас интересует.\nХотим предложить сотрудничество.\n\nС уважением",
+      "subject": "{Предложение|Отличное предложение} сотрудничества",
+      "body": "Привет!\n\nПроверили ваше объявление, цена {price} нас интересует.\nХотим предложить {сотрудничество|партнёрство}.\n\nС уважением",
       "is_html": false
     },
     "reply": {
@@ -15,12 +15,24 @@
   },
   "automation": {
     "parser_key": "YOUR_PARSER_API_KEY",
-    "platform": "vinted_it",
+    "platform": "vinted",
     "country": "IT",
     "user_id": "YOUR_TELEGRAM_ID",
     "api_key": "YOUR_CREATEAD_API_KEY",
     "delay": 5,
     "max_letters": 10,
     "service_code": "vinted_it"
+  },
+  "parser_filters": {
+    "category": "",
+    "price": "",
+    "ads": "",
+    "reviews": "",
+    "publication": "5m",
+    "phone": "",
+    "delivery": "",
+    "registration": "",
+    "blacklist": "",
+    "limit": "50"
   }
 }

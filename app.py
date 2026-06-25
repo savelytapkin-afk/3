@@ -5,6 +5,7 @@ import threading
 import json
 import time
 import requests
+import random
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -16,6 +17,8 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 # Категории для каждой платформы
+SPINTAX_PATTERN = re.compile(r'\{([^{}]*)\}')
+
 PLATFORMS_CATEGORIES = {
     "vinted": {"1": "детское", "2": "дизайнерское", "3": "для дома", "4": "женское", "5": "мужское", "6": "развлечения", "7": "спорт", "8": "электроника"},
     "2dehands": {"1": "антиквариат", "2": "аудио и фото", "3": "бытовая техника", "4": "детские товары", "5": "диски", "6": "женская одежда", "7": "книги", "8": "компьютеры"},
@@ -34,7 +37,7 @@ PLATFORMS_CATEGORIES = {
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Gmail Sender v3.4")
+        self.title("Gmail Sender v3.5")
         self.geometry("1400x800")
         
         self.running = False
@@ -479,7 +482,7 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_settings)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="Gmail Sender v3.4", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(frame, text="Gmail Sender v3.5", font=("Arial", 18, "bold")).pack(pady=10)
         ctk.CTkLabel(frame, text="Автоматизация рассылки писем с интеллектуальным парсером", font=("Arial", 12)).pack(pady=5)
         
         info = """✅ Вкладка "Dolphin" с токеном и профилями
@@ -495,9 +498,17 @@ class App(ctk.CTk):
 ✅ Валидация токена перед открытием профилей
 ✅ Retry-логика для подключения
 
-v3.4 - 2026-06-25"""
+v3.5 - 2026-06-25"""
         
         ctk.CTkLabel(frame, text=info, font=("Arial", 11), justify="left").pack(pady=10)
+    
+    def _process_spintax(self, text: str) -> str:
+        """Обрабатывает спинтакс {вариант1|вариант2}"""
+        for _ in range(20):
+            if not SPINTAX_PATTERN.search(text):
+                break
+            text = SPINTAX_PATTERN.sub(lambda m: random.choice(m.group(1).split('|')), text)
+        return text
     
     def _log(self, message):
         """Логирование"""
@@ -740,17 +751,17 @@ v3.4 - 2026-06-25"""
             try:
                 self._log(f"\n  📋 Профиль: {profile_id}")
                 
-                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
+                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start?automation=1"
                 headers = {"Authorization": "Bearer " + token}
                 
-                self._log(f"  📤 POST {url}")
-                self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
+                self._log(f"  📤 GET {url}")
+                self._log(f"  🔐 Headers: Authorization ******")
                 
                 # Retry-логика: до 3 попыток при ошибке соединения
                 response = None
                 for attempt in range(1, 4):
                     try:
-                        response = requests.post(url, headers=headers, timeout=30)
+                        response = requests.get(url, headers=headers, timeout=30)
                         break
                     except requests.exceptions.ConnectionError as e:
                         if attempt < 3:
@@ -766,19 +777,17 @@ v3.4 - 2026-06-25"""
                     driver_info = response.json()
                     self._log(f"  ✅ Ответ: {json.dumps(driver_info, indent=2)}")
                     
-                    # Ищем WebSocket URL
-                    ws_url = driver_info.get('webSocketDebuggerUrl', '')
-                    if not ws_url:
-                        self._log(f"  ❌ Ошибка: webSocketDebuggerUrl не найден в ответе")
+                    # Dolphin Anty возвращает порт в automation.port
+                    automation_data = driver_info.get('automation', {})
+                    port = automation_data.get('port')
+                    if not port:
+                        self._log(f"  ❌ Ошибка: порт не найден в ответе (ожидается automation.port)")
                         continue
                     
-                    self._log(f"  🔗 WebSocket URL: {ws_url}")
-                    
-                    driver_port = ws_url.split(':')[-1]
-                    self._log(f"  🔌 Порт: {driver_port}")
+                    self._log(f"  🔌 Порт: {port}")
                     
                     options = webdriver.ChromeOptions()
-                    options.add_experimental_option('debuggerAddress', f'localhost:{driver_port}')
+                    options.add_experimental_option('debuggerAddress', f'localhost:{port}')
                     driver = webdriver.Chrome(options=options)
                     
                     drivers[profile_id] = driver
@@ -842,6 +851,8 @@ v3.4 - 2026-06-25"""
                 
                 body = body.replace("{title}", item.get('title', ''))
                 body = body.replace("{price}", item.get('price', ''))
+                subject = self._process_spintax(subject)
+                body = self._process_spintax(body)
                 
                 self._send_email(driver, email, subject, body)
                 self._log(f"✉️  {email} отправлено")
@@ -857,12 +868,12 @@ v3.4 - 2026-06-25"""
         driver.get("https://mail.google.com/mail/u/0/#compose")
         time.sleep(3)
         
-        to_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="To"]')))
+        to_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="To"], input[aria-label="Кому"]')))
         to_field.clear()
         to_field.send_keys(to_email)
         time.sleep(1)
         
-        subject_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="Subject"]')))
+        subject_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="Subject"], input[aria-label="Тема"]')))
         subject_field.clear()
         subject_field.send_keys(subject)
         time.sleep(1)
@@ -871,7 +882,7 @@ v3.4 - 2026-06-25"""
         driver.execute_script("arguments[0].innerHTML = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", body_field, body)
         time.sleep(2)
         
-        send_btn = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="Send"]')
+        send_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[aria-label="Send"], button[aria-label="Отправить"]')))
         send_btn.click()
         time.sleep(2)
     
@@ -1022,7 +1033,7 @@ v3.4 - 2026-06-25"""
         """Отправляет ответ"""
         wait = WebDriverWait(driver, 40)
         
-        reply_btn = driver.find_element(By.CSS_SELECTOR, 'g[aria-label="Reply"]')
+        reply_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[aria-label="Reply"], div[aria-label="Ответить"], button[aria-label="Reply"], button[aria-label="Ответить"]')))
         reply_btn.click()
         time.sleep(2)
         
@@ -1030,7 +1041,7 @@ v3.4 - 2026-06-25"""
         driver.execute_script("arguments[0].innerHTML = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", reply_field, html_body)
         time.sleep(2)
         
-        send_btn = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="Send"]')
+        send_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[aria-label="Send"], button[aria-label="Отправить"]')))
         send_btn.click()
         time.sleep(2)
     
