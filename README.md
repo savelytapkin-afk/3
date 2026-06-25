@@ -29,18 +29,13 @@ pip install -r requirements.txt
 
 ## ⚙️ Настройка
 
-### 1. Создать конфиг
+### 1. Настроить конфиг через приложение
 
-```bash
-cp config.json.example config.json
-```
-
-Отредактировать `config.json`:
-- `token` - API токен Dolphin Anty
-- `parser_key` - API ключ парсера
-- `user_id` - ID в CreateAd
-- `api_key` - API ключ CreateAd
-- `service_code` - код сервиса (например: vinted_it)
+Запусти приложение и заполни данные через интерфейс:
+- Вкладка **"🐬 Dolphin"** — вставь API-токен Dolphin Anty и нажми **"💾 Сохранить токен"** (config.json создастся автоматически)
+- Вкладка **"🛰 Парсер"** — заполни ключ парсера и фильтры
+- Вкладка **"🚀 Отправка"** — заполни User ID, API Key, Service Code для CreateAd
+- Вкладка **"✉️ Шаблоны"** — настрой шаблоны первого письма и ответа
 
 ### 2. Создать файл профилей
 
@@ -107,30 +102,41 @@ python app.py
 
 ## 🔧 Структура конфига
 
+`config.json` создаётся автоматически при первом сохранении токена:
+
 ```json
 {
   "token": "dolphin_api_token",
   "templates": {
     "first": {
       "subject": "...",
-      "body": "...",
-      "is_html": false
+      "body": "..."
     },
     "reply": {
-      "subject": "...",
-      "body": "...",
-      "is_html": true
+      "body": "..."
     }
   },
   "automation": {
     "parser_key": "...",
-    "platform": "vinted_it",
+    "platform": "vinted",
     "country": "IT",
     "user_id": "...",
     "api_key": "...",
     "delay": 5,
     "max_letters": 10,
     "service_code": "vinted_it"
+  },
+  "parser_filters": {
+    "category": "",
+    "price": "",
+    "ads": "",
+    "reviews": "",
+    "publication": "5m",
+    "phone": "",
+    "delivery": "",
+    "registration": "",
+    "blacklist": "",
+    "limit": "50"
   }
 }
 ```
@@ -168,7 +174,7 @@ python app.py
 
 4. **Если всё равно не работает**:
    - Перезагрузите Dolphin Anty
-   - Очистите `config.json` и создайте новый из `config.json.example`
+   - Проверьте и пересохраните токен через вкладку **"🐬 Dolphin"**
    - Проверьте брандмауэр — может блокировать `localhost:3001`
 
 ### 🔴 "Dolphin Anty недоступен на localhost:3001"
