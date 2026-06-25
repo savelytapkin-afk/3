@@ -15,7 +15,7 @@
   },
   "automation": {
     "parser_key": "YOUR_PARSER_API_KEY",
-    "platform": "vinted",
+    "platform": "vinted_it",
     "country": "IT",
     "user_id": "YOUR_TELEGRAM_ID",
     "api_key": "YOUR_CREATEAD_API_KEY",

@@ -25,4 +25,4 @@ with zipfile.ZipFile(ZIP_PATH, "w", zipfile.ZIP_DEFLATED) as zf:
         if file_path.exists():
             zf.write(file_path, arcname=file_name)
 
-print(ZIP_PATH)
+print(f"Release package created: {ZIP_PATH}")

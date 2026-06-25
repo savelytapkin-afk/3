@@ -525,26 +525,12 @@ class App(ctk.CTk):
             parser_filters = self.settings_config.get("parser_filters", {})
             params = {
                 "country": self.settings_config.get("automation", {}).get("country", "IT"),
-                "limit": parser_filters.get("limit") or "100",
+                "limit": parser_filters.get("limit") or PARSER_FILTER_DEFAULTS["limit"],
             }
-            if parser_filters.get("category"):
-                params["category"] = parser_filters["category"]
-            if parser_filters.get("price"):
-                params["price"] = parser_filters["price"]
-            if parser_filters.get("ads"):
-                params["ads"] = parser_filters["ads"]
-            if parser_filters.get("reviews"):
-                params["reviews"] = parser_filters["reviews"]
-            if parser_filters.get("publication"):
-                params["publication"] = parser_filters["publication"]
-            if parser_filters.get("delivery"):
-                params["delivery"] = parser_filters["delivery"]
-            if parser_filters.get("phone"):
-                params["phone"] = parser_filters["phone"]
-            if parser_filters.get("registration"):
-                params["registration"] = parser_filters["registration"]
-            if parser_filters.get("blacklist"):
-                params["blacklist"] = parser_filters["blacklist"]
+            for key in ("category", "price", "ads", "reviews", "publication", "delivery", "phone", "registration", "blacklist"):
+                value = parser_filters.get(key)
+                if value:
+                    params[key] = value
 
             parser_platform = normalize_parser_platform(platform)
             r = requests.get(
