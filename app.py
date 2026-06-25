@@ -515,7 +515,7 @@ v3.4 - 2026-06-25"""
         
         self._log("\n🔍 Проверка токена Dolphin...")
         url = "http://localhost:3001/v1.0/browser_profiles"
-        headers = {"Authorization": "Bearer " + token}
+        headers = {"Authorization": token}
         try:
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
@@ -741,10 +741,10 @@ v3.4 - 2026-06-25"""
                 self._log(f"\n  📋 Профиль: {profile_id}")
                 
                 url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
-                headers = {"Authorization": "Bearer " + token}
+                headers = {"Authorization": token}
                 
                 self._log(f"  📤 POST {url}")
-                self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
+                self._log(f"  🔐 Headers: Authorization [скрыто]")
                 
                 # Retry-логика: до 3 попыток при ошибке соединения
                 response = None
