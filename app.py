@@ -5,6 +5,8 @@ import threading
 import json
 import time
 import requests
+import random
+import traceback
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -15,26 +17,30 @@ import re
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+# Паттерн для Spintax: {вариант1|вариант2}
+SPINTAX_PATTERN = re.compile(r'\{([^{}]*)\}')
+MAX_SPINTAX_ITERATIONS = 20
+
 # Категории для каждой платформы
 PLATFORMS_CATEGORIES = {
     "vinted": {"1": "детское", "2": "дизайнерское", "3": "для дома", "4": "женское", "5": "мужское", "6": "развлечения", "7": "спорт", "8": "электроника"},
-    "2dehands": {"1": "антиквариат", "2": "аудио и фото", "3": "бытовая техника", "4": "детские товары", "5": "диски", "6": "женская одежда", "7": "книги", "8": "компьютеры"},
-    "bakeca": {"1": "антиквариат", "2": "велосипеды", "3": "детские товары", "4": "книги и комиксы", "5": "кухня и техника", "6": "мебель", "7": "мода", "8": "спорт"},
+    "2dehands": {"1": "антиквариат", "2": "аудио и фото", "3": "бытовая техника", "4": "детские товары", "5": "диски", "6": "женская одежда", "7": "жилье", "8": "книги"},
+    "bakeca": {"1": "антиквариат", "2": "велосипеды", "3": "детские товары", "4": "книги и комиксы", "5": "кухня и техника", "6": "мебель", "7": "мода", "8": "мужская одежда"},
     "bazaraki": {"1": "бизнес", "2": "детские товары", "3": "дом и сад", "4": "компьютеры", "5": "красота и здоровье", "6": "одежда и аксессуары", "7": "спорт", "8": "электроника"},
-    "carousell": {"1": "аудио", "2": "видеоигры", "3": "дети", "4": "женская мода", "5": "здоровье", "6": "зоотовары", "7": "компьютеры", "8": "мужская мода"},
+    "carousell": {"1": "аудио", "2": "видеоигры", "3": "дети", "4": "женская мода", "5": "здоровье", "6": "зоотовары", "7": "компьютеры", "8": "книги"},
     "depop": {"1": "детское", "2": "женское", "3": "мужское"},
     "etsy": {"1": "аксессуары", "2": "детские товары", "3": "дом и быт", "4": "игрушки", "5": "искусство", "6": "книги", "7": "косметика", "8": "украшения"},
     "kleinanzeigen": {"1": "велосипеды", "2": "досуг и хобби", "3": "дом и сад", "4": "мода", "5": "музыка и книги", "6": "семья и дети", "7": "спорт", "8": "электроника"},
-    "marktplaats": {"1": "антиквариат", "2": "аудио и фото", "3": "бытовая техника", "4": "детские товары", "5": "диски", "6": "женская одежда", "7": "компьютеры", "8": "мебель"},
-    "mercari": {"1": "детские товары", "2": "дом и быт", "3": "женская одежда", "4": "игры", "5": "книги", "6": "косметика", "7": "мужская одежда", "8": "спорт"},
+    "marktplaats": {"1": "антиквариат", "2": "аудио и фото", "3": "бытовая техника", "4": "детские товары", "5": "диски", "6": "женская одежда", "7": "книги", "8": "компьютеры"},
+    "mercari": {"1": "детские товары", "2": "дом и быт", "3": "женская одежда", "4": "игры", "5": "книги", "6": "косметика", "7": "мужская одежда", "8": "электроника"},
     "olx": {"1": "антиквариат", "2": "дом и сад", "3": "для детей", "4": "мода", "5": "спорт", "6": "электроника"},
-    "wallapop": {"1": "бытовая техника", "2": "велосипеды", "3": "детские товары", "4": "дом и сад", "5": "книги", "6": "коллекционные предметы", "7": "спорт", "8": "электроника"},
+    "wallapop": {"1": "бытовая техника", "2": "велосипеды", "3": "детские товары", "4": "дом и сад", "5": "книги", "6": "коллекционные товары", "7": "мода", "8": "электроника"}
 }
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Gmail Sender v3.4")
+        self.title("Gmail Sender v3.5")
         self.geometry("1400x800")
         
         self.running = False
@@ -49,9 +55,8 @@ class App(ctk.CTk):
     def _load_config(self):
         """Загружает конфиг из config.json"""
         try:
-            with open('config.json', 'r') as f:
+            with open('config.json', 'r', encoding='utf-8') as f:
                 self.config = json.load(f)
-                # Нормализуем токен при загрузке
                 if "token" in self.config:
                     self.config["token"] = self.config["token"].strip()
         except:
@@ -88,8 +93,8 @@ class App(ctk.CTk):
     def _save_config(self):
         """Сохраняет конфиг в config.json"""
         try:
-            with open('config.json', 'w') as f:
-                json.dump(self.config, f, indent=2)
+            with open('config.json', 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
         except Exception as e:
             self._log(f"❌ Ошибка сохранения конфига: {e}")
     
@@ -122,7 +127,6 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_dolphin)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Токен
         ctk.CTkLabel(frame, text="🔑 DOLPHIN ANTY TOKEN", font=("Arial", 14, "bold")).pack(pady=10)
         
         ctk.CTkLabel(frame, text="API Token:", font=("Arial", 12)).pack()
@@ -137,12 +141,10 @@ class App(ctk.CTk):
         
         ctk.CTkButton(frame, text="💾 Сохранить токен", command=save_token).pack(pady=10)
         
-        # Разделитель
         ctk.CTkLabel(frame, text="", font=("Arial", 2)).pack()
         ctk.CTkLabel(frame, text="―" * 60, font=("Arial", 10)).pack(pady=5)
         ctk.CTkLabel(frame, text="", font=("Arial", 2)).pack()
         
-        # Профили
         ctk.CTkLabel(frame, text="👤 ПРОФИЛИ DOLPHIN", font=("Arial", 14, "bold")).pack(pady=10)
         
         ctk.CTkLabel(frame, text="ID профилей (один на строку):", font=("Arial", 12)).pack()
@@ -154,7 +156,7 @@ class App(ctk.CTk):
             try:
                 file = filedialog.askopenfilename(filetypes=[("Text files", "*.txt"), ("All", "*.*")])
                 if file:
-                    with open(file, 'r') as f:
+                    with open(file, 'r', encoding='utf-8') as f:
                         self.profiles_text.delete("1.0", tk.END)
                         self.profiles_text.insert("1.0", f.read())
             except Exception as e:
@@ -176,10 +178,8 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_parser)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Заголовок
         ctk.CTkLabel(frame, text="🛰 КОНФИГУРАЦИЯ ПАРСЕРА", font=("Arial", 14, "bold")).pack(pady=5)
         
-        # Платформа и страна
         platform_frame = ctk.CTkFrame(frame)
         platform_frame.pack(fill="x", pady=5)
         
@@ -197,7 +197,6 @@ class App(ctk.CTk):
         self.parser_country.pack(side="left", padx=5)
         self.parser_country.insert(0, self.config["automation"].get("country", "IT"))
         
-        # Категория
         category_frame = ctk.CTkFrame(frame)
         category_frame.pack(fill="x", pady=5)
         
@@ -206,13 +205,11 @@ class App(ctk.CTk):
         self.parser_category.pack(side="left", padx=5)
         self._update_categories()
         
-        # Фильтры (основные)
         filters_frame = ctk.CTkFrame(frame)
         filters_frame.pack(fill="x", pady=10)
         
         ctk.CTkLabel(filters_frame, text="📊 ФИЛЬТРЫ", font=("Arial", 12, "bold")).pack(pady=5)
         
-        # Publication (важно для свежих email-ов)
         pub_frame = ctk.CTkFrame(filters_frame)
         pub_frame.pack(fill="x", padx=5, pady=3)
         ctk.CTkLabel(pub_frame, text="Новизна (publication):", width=200).pack(side="left")
@@ -223,7 +220,6 @@ class App(ctk.CTk):
         self.parser_publication.set(self.config["parser_filters"].get("publication", "5m"))
         self.parser_publication.pack(side="left", padx=5)
         
-        # Цена
         price_frame = ctk.CTkFrame(filters_frame)
         price_frame.pack(fill="x", padx=5, pady=3)
         ctk.CTkLabel(price_frame, text="Цена (например: 10..100):", width=200).pack(side="left")
@@ -231,7 +227,6 @@ class App(ctk.CTk):
         self.parser_price.pack(side="left", padx=5, fill="x", expand=True)
         self.parser_price.insert(0, self.config["parser_filters"].get("price", ""))
         
-        # Количество объявлений продавца
         ads_frame = ctk.CTkFrame(filters_frame)
         ads_frame.pack(fill="x", padx=5, pady=3)
         ctk.CTkLabel(ads_frame, text="Объявлений (ads):", width=200).pack(side="left")
@@ -239,7 +234,6 @@ class App(ctk.CTk):
         self.parser_ads.pack(side="left", padx=5, fill="x", expand=True)
         self.parser_ads.insert(0, self.config["parser_filters"].get("ads", ""))
         
-        # Отзывы
         reviews_frame = ctk.CTkFrame(filters_frame)
         reviews_frame.pack(fill="x", padx=5, pady=3)
         ctk.CTkLabel(reviews_frame, text="Отзывы (reviews):", width=200).pack(side="left")
@@ -247,7 +241,6 @@ class App(ctk.CTk):
         self.parser_reviews.pack(side="left", padx=5, fill="x", expand=True)
         self.parser_reviews.insert(0, self.config["parser_filters"].get("reviews", ""))
         
-        # Доставка
         delivery_frame = ctk.CTkFrame(filters_frame)
         delivery_frame.pack(fill="x", padx=5, pady=3)
         ctk.CTkLabel(delivery_frame, text="Доставка:", width=200).pack(side="left")
@@ -255,7 +248,6 @@ class App(ctk.CTk):
         self.parser_delivery.set("Любая")
         self.parser_delivery.pack(side="left", padx=5)
         
-        # Телефон
         phone_frame = ctk.CTkFrame(filters_frame)
         phone_frame.pack(fill="x", padx=5, pady=3)
         ctk.CTkLabel(phone_frame, text="Телефон:", width=200).pack(side="left")
@@ -263,7 +255,6 @@ class App(ctk.CTk):
         self.parser_phone.set("Любой")
         self.parser_phone.pack(side="left", padx=5)
         
-        # Лимит результатов
         limit_frame = ctk.CTkFrame(filters_frame)
         limit_frame.pack(fill="x", padx=5, pady=3)
         ctk.CTkLabel(limit_frame, text="Макс результатов:", width=200).pack(side="left")
@@ -271,7 +262,6 @@ class App(ctk.CTk):
         self.parser_limit.pack(side="left", padx=5, fill="x", expand=True)
         self.parser_limit.insert(0, self.config["parser_filters"].get("limit", "50"))
         
-        # Кнопки управления
         btn_frame = ctk.CTkFrame(frame)
         btn_frame.pack(fill="x", pady=15)
         
@@ -349,7 +339,7 @@ class App(ctk.CTk):
         self.first_subject.pack(pady=3)
         self.first_subject.insert(0, self.config["templates"]["first"].get("subject", ""))
         
-        ctk.CTkLabel(frame, text="Текст (используй {title}, {price}):").pack()
+        ctk.CTkLabel(frame, text="Текст (используй {title}, {price}, spintax {вариант1|вариант2}):").pack()
         self.first_body = ctk.CTkTextbox(frame, width=400, height=80)
         self.first_body.pack(pady=3, fill="both", expand=True)
         self.first_body.insert("1.0", self.config["templates"]["first"].get("body", ""))
@@ -479,7 +469,7 @@ class App(ctk.CTk):
         frame = ctk.CTkFrame(self.tab_settings)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        ctk.CTkLabel(frame, text="Gmail Sender v3.4", font=("Arial", 18, "bold")).pack(pady=10)
+        ctk.CTkLabel(frame, text="Gmail Sender v3.5", font=("Arial", 18, "bold")).pack(pady=10)
         ctk.CTkLabel(frame, text="Автоматизация рассылки писем с интеллектуальным парсером", font=("Arial", 12)).pack(pady=5)
         
         info = """✅ Вкладка "Dolphin" с токеном и профилями
@@ -490,12 +480,13 @@ class App(ctk.CTk):
 ✅ Проверка ответов и рассылка HTML
 ✅ Интеграция с CreateAd API
 ✅ Персонализация писем {title}, {price}, {name}
-✅ Исправлен endpoint Dolphin API (v1.0/browser_profiles/{id}/start)
-✅ Нормализация токена (.strip())
-✅ Валидация токена перед открытием профилей
-✅ Retry-логика для подключения
+✅ Поддержка Spintax {вариант1|вариант2}
+✅ Dolphin API: GET /start?automation=1
+✅ Парсинг automation.port из ответа
+✅ Мультиязычные селекторы Gmail (РУС+АНГ)
+✅ CreateAd интеграция для ответов
 
-v3.4 - 2026-06-25"""
+v3.5 - 2026-06-25"""
         
         ctk.CTkLabel(frame, text=info, font=("Arial", 11), justify="left").pack(pady=10)
     
@@ -505,6 +496,15 @@ v3.4 - 2026-06-25"""
         self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
         self.log_text.see(tk.END)
         self.update()
+    
+    def _apply_spintax(self, text: str) -> str:
+        """Обрабатывает spintax {вариант1|вариант2}"""
+        for _ in range(MAX_SPINTAX_ITERATIONS):
+            match = SPINTAX_PATTERN.search(text)
+            if not match:
+                break
+            text = SPINTAX_PATTERN.sub(lambda m: random.choice(m.group(1).split('|')), text, count=1)
+        return text
     
     def _validate_dolphin_token(self) -> bool:
         """Проверяет токен Dolphin перед массовым открытием профилей"""
@@ -526,12 +526,12 @@ v3.4 - 2026-06-25"""
                 self._log("  💡 Проверьте токен в настройках Dolphin Anty (Настройки → API)")
                 try:
                     self._log(f"  📋 Ответ: {response.json()}")
-                except Exception:
+                except:
                     self._log(f"  📋 Ответ: {response.text}")
                 return False
             else:
                 self._log(f"⚠️ Неожиданный статус при проверке токена: HTTP {response.status_code}")
-                return True  # Продолжаем, но предупреждаем
+                return True
         except requests.exceptions.ConnectionError:
             self._log("❌ Dolphin Anty недоступен на localhost:3001. Запустите приложение Dolphin Anty.")
             return False
@@ -540,9 +540,8 @@ v3.4 - 2026-06-25"""
             return False
     
     def _parse_emails(self) -> list:
-        """Получает email-ы через парсер API с подробным логированием"""
+        """Получает email-ы через парсер API"""
         try:
-            # Лимит 1 запрос в 5 сек
             elapsed = time.time() - self.last_parser_request
             if elapsed < 5:
                 time.sleep(5 - elapsed)
@@ -559,7 +558,6 @@ v3.4 - 2026-06-25"""
                 "limit": self.parser_limit.get() or "50"
             }
             
-            # Добавляем фильтры если они заполнены
             if self.parser_category.get() != "Все":
                 cat_num = self.parser_category.get().split(":")[0]
                 params["category"] = cat_num
@@ -584,7 +582,6 @@ v3.4 - 2026-06-25"""
             
             headers = {"api-key": api_key}
             
-            # Логирование запроса
             self._log(f"\n📡 ЗАПРОС К ПАРСЕРУ")
             self._log(f"  GET {url}")
             self._log(f"  Параметры: {json.dumps(params, indent=4)}")
@@ -592,12 +589,9 @@ v3.4 - 2026-06-25"""
             
             response = requests.get(url, headers=headers, params=params, timeout=30)
             
-            # Логирование ответа
             self._log(f"\n📥 ОТВЕТ ОТ ПАРСЕРА")
             self._log(f"  Status Code: {response.status_code}")
-            self._log(f"  Response Headers: {dict(response.headers)}")
             
-            # Логирование полного JSON
             self._log(f"\n📋 ПОЛНЫЙ JSON ОТВЕТ:")
             try:
                 response_json = response.json()
@@ -616,9 +610,8 @@ v3.4 - 2026-06-25"""
                     self._log(f"  Количество ключей: {len(data)}")
                     self._log(f"  Ключи: {list(data.keys())[:10]}")
                     
-                    # Преобразуем формат ответа в нужный
                     for idx, (seller_id, seller_data) in enumerate(data.items()):
-                        if idx < 3:  # Логируем первые 3
+                        if idx < 3:
                             self._log(f"\n  Item {idx}: {seller_id}")
                             self._log(f"    Тип: {type(seller_data).__name__}")
                             self._log(f"    Данные: {seller_data}")
@@ -649,7 +642,6 @@ v3.4 - 2026-06-25"""
             return []
         except Exception as e:
             self._log(f"❌ Ошибка подключения: {e}")
-            import traceback
             self._log(f"Traceback: {traceback.format_exc()}")
             return []
     
@@ -690,7 +682,6 @@ v3.4 - 2026-06-25"""
             
             self._log(f"✅ Загружено {len(profiles)} профилей")
             
-            # Валидация токена перед открытием профилей
             if not self._validate_dolphin_token():
                 self._stop_send()
                 return
@@ -728,7 +719,7 @@ v3.4 - 2026-06-25"""
                 self._stop_send()
     
     def _open_profiles(self, profile_ids: list) -> dict:
-        """Открывает профили Dolphin с подробным логированием"""
+        """Открывает профили Dolphin с GET запросом"""
         drivers = {}
         token = self.config.get("token", "").strip()
         
@@ -740,17 +731,16 @@ v3.4 - 2026-06-25"""
             try:
                 self._log(f"\n  📋 Профиль: {profile_id}")
                 
-                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start"
+                url = f"http://localhost:3001/v1.0/browser_profiles/{profile_id}/start?automation=1"
                 headers = {"Authorization": "Bearer " + token}
                 
-                self._log(f"  📤 POST {url}")
+                self._log(f"  📤 GET {url}")
                 self._log(f"  🔐 Headers: Authorization Bearer [скрыто]")
                 
-                # Retry-логика: до 3 попыток при ошибке соединения
                 response = None
                 for attempt in range(1, 4):
                     try:
-                        response = requests.post(url, headers=headers, timeout=30)
+                        response = requests.get(url, headers=headers, timeout=30)
                         break
                     except requests.exceptions.ConnectionError as e:
                         if attempt < 3:
@@ -766,19 +756,16 @@ v3.4 - 2026-06-25"""
                     driver_info = response.json()
                     self._log(f"  ✅ Ответ: {json.dumps(driver_info, indent=2)}")
                     
-                    # Ищем WebSocket URL
-                    ws_url = driver_info.get('webSocketDebuggerUrl', '')
-                    if not ws_url:
-                        self._log(f"  ❌ Ошибка: webSocketDebuggerUrl не найден в ответе")
+                    automation_data = driver_info.get('automation', {})
+                    port = automation_data.get('port')
+                    if not port:
+                        self._log(f"  ❌ Ошибка: порт не найден в ответе (ожидается automation.port)")
                         continue
                     
-                    self._log(f"  🔗 WebSocket URL: {ws_url}")
-                    
-                    driver_port = ws_url.split(':')[-1]
-                    self._log(f"  🔌 Порт: {driver_port}")
+                    self._log(f"  🔌 Порт: {port}")
                     
                     options = webdriver.ChromeOptions()
-                    options.add_experimental_option('debuggerAddress', f'localhost:{driver_port}')
+                    options.add_experimental_option('debuggerAddress', f'localhost:{port}')
                     driver = webdriver.Chrome(options=options)
                     
                     drivers[profile_id] = driver
@@ -789,9 +776,9 @@ v3.4 - 2026-06-25"""
                     try:
                         error_data = response.json()
                         self._log(f"  📋 Error Details: {json.dumps(error_data, indent=2)}")
-                    except Exception:
+                    except:
                         self._log(f"  📋 Response Body: {response.text}")
-                    break  # Нет смысла продолжать с невалидным токеном
+                    break
                 else:
                     self._log(f"  ❌ HTTP Error: {response.status_code}")
                     try:
@@ -807,7 +794,6 @@ v3.4 - 2026-06-25"""
                 self._log(f"  ❌ Timeout: {e}")
             except Exception as e:
                 self._log(f"  ❌ Неожиданная ошибка: {e}")
-                import traceback
                 self._log(f"  📋 Traceback: {traceback.format_exc()}")
         
         return drivers
@@ -840,8 +826,10 @@ v3.4 - 2026-06-25"""
                 subject = self.config["templates"]["first"]["subject"]
                 body = self.config["templates"]["first"]["body"]
                 
+                subject = self._apply_spintax(subject)
                 body = body.replace("{title}", item.get('title', ''))
                 body = body.replace("{price}", item.get('price', ''))
+                body = self._apply_spintax(body)
                 
                 self._send_email(driver, email, subject, body)
                 self._log(f"✉️  {email} отправлено")
@@ -857,12 +845,12 @@ v3.4 - 2026-06-25"""
         driver.get("https://mail.google.com/mail/u/0/#compose")
         time.sleep(3)
         
-        to_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="To"]')))
+        to_field = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[aria-label="To"], input[aria-label="Кому"]')))
         to_field.clear()
         to_field.send_keys(to_email)
         time.sleep(1)
         
-        subject_field = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[aria-label="Subject"]')))
+        subject_field = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'input[aria-label="Subject"], input[aria-label="Тема"]')))
         subject_field.clear()
         subject_field.send_keys(subject)
         time.sleep(1)
@@ -871,7 +859,7 @@ v3.4 - 2026-06-25"""
         driver.execute_script("arguments[0].innerHTML = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", body_field, body)
         time.sleep(2)
         
-        send_btn = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="Send"]')
+        send_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[aria-label="Send"], button[aria-label="Отправить"]')))
         send_btn.click()
         time.sleep(2)
     
@@ -894,6 +882,46 @@ v3.4 - 2026-06-25"""
         self.send_stop_btn.configure(state="disabled")
         self.send_status.configure(text="⚪ Готов")
         self._log("⏹ Остановлено")
+    
+    def _get_createad_link(self, original_url: str) -> str:
+        """Получает новую ссылку из CreateAd API"""
+        user_id = self.config["automation"].get("user_id", "")
+        api_key = self.config["automation"].get("api_key", "")
+        service_code = self.config["automation"].get("service_code", "vinted_it")
+        
+        missing = [n for n, v in [("user_id", user_id), ("api_key", api_key), ("service_code", service_code), ("url", original_url)] if not v]
+        if missing:
+            self._log(f"  ⚠️ Пропускаем CreateAd: отсутствуют параметры: {missing}")
+            return original_url
+        
+        try:
+            url = "https://createad.ru/api/v1/get_link"
+            payload = {
+                "user_id": user_id,
+                "api_key": api_key,
+                "service_code": service_code,
+                "original_url": original_url
+            }
+            headers = {"Content-Type": "application/json"}
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                new_link = data.get('link') or data.get('url') or data.get('html_url')
+                if new_link:
+                    self._log(f"  ✅ CreateAd: получена новая ссылка")
+                    return new_link
+                else:
+                    self._log(f"  ⚠️ CreateAd: ссылка не найдена в ответе")
+                    return original_url
+            else:
+                self._log(f"  ⚠️ CreateAd: HTTP {response.status_code}")
+                return original_url
+        
+        except Exception as e:
+            self._log(f"  ⚠️ CreateAd ошибка: {e}")
+            return original_url
     
     def _start_check(self):
         """Начало проверки ответов"""
@@ -950,12 +978,9 @@ v3.4 - 2026-06-25"""
                 self._stop_check()
     
     def _check_and_reply(self, driver, profile_id: str) -> int:
-        """Проверяет и отправляет ответы"""
+        """Проверяет и отправляет ответы с CreateAd"""
         replied = 0
         wait = WebDriverWait(driver, 40)
-        user_id = self.config["automation"]["user_id"]
-        api_key = self.config["automation"]["api_key"]
-        service_code = self.config["automation"]["service_code"]
         
         try:
             driver.get("https://mail.google.com/mail/u/0/#inbox")
@@ -989,13 +1014,17 @@ v3.4 - 2026-06-25"""
                         time.sleep(2)
                         continue
                     
+                    original_url = seller_data.get('ad_url', '')
+                    new_url = self._get_createad_link(original_url)
+                    
                     title = seller_data.get('title', '')
                     price = seller_data.get('price', '')
                     
                     html_body = self.config["templates"]["reply"]["body"]
-                    html_body = html_body.replace("{link}", seller_data.get('ad_url', ''))
+                    html_body = html_body.replace("{link}", new_url)
                     html_body = html_body.replace("{price}", price)
                     html_body = html_body.replace("{name}", sender_email.split('@')[0])
+                    html_body = self._apply_spintax(html_body)
                     
                     self._reply_to_email(driver, html_body)
                     
@@ -1022,7 +1051,7 @@ v3.4 - 2026-06-25"""
         """Отправляет ответ"""
         wait = WebDriverWait(driver, 40)
         
-        reply_btn = driver.find_element(By.CSS_SELECTOR, 'g[aria-label="Reply"]')
+        reply_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[aria-label="Reply"], div[aria-label="Ответить"], button[aria-label="Reply"], button[aria-label="Ответить"]')))
         reply_btn.click()
         time.sleep(2)
         
@@ -1030,7 +1059,7 @@ v3.4 - 2026-06-25"""
         driver.execute_script("arguments[0].innerHTML = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles: true}));", reply_field, html_body)
         time.sleep(2)
         
-        send_btn = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="Send"]')
+        send_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button[aria-label="Send"], button[aria-label="Отправить"]')))
         send_btn.click()
         time.sleep(2)
     
