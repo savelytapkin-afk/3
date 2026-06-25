@@ -1,5 +1,5 @@
 {
-  "_comment_token": "Получите токен в Dolphin Anty: Настройки → API → Скопируйте токен. Обязательна платная подписка для работы с API.",
+  "_comment_token": "Получите JWT токен в Dolphin Anty: Настройки → API → Скопируйте токен и вставьте его как есть, без префикса Bearer. Обязательна платная подписка для работы с API.",
   "token": "YOUR_DOLPHIN_API_TOKEN_HERE",
   "templates": {
     "first": {

@@ -36,7 +36,7 @@ cp config.json.example config.json
 ```
 
 Отредактировать `config.json`:
-- `token` - API токен Dolphin Anty
+- `token` - JWT токен Dolphin Anty, вставляется как есть без префикса `Bearer`
 - `parser_key` - API ключ парсера
 - `user_id` - ID в CreateAd
 - `api_key` - API ключ CreateAd
@@ -159,7 +159,7 @@ python app.py
 
 2. **Вставь токен** в приложение:
    - Откройте вкладку **"🐬 Dolphin"**
-   - Вставьте токен в поле **"API Token"**
+   - Вставьте JWT токен в поле **"API Token"** как есть, без префикса `Bearer`
    - Нажмите **"💾 Сохранить токен"**
 
 3. **Проверь подключение**:
